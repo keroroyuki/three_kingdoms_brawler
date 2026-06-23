@@ -474,25 +474,26 @@ const SpriteGen = {
         this.rect(ctx,13,6,1,1,'#E8E8E8',s);
     },
     _zfAtkWindup(ctx, s) {
-        // 蛇矛后拉
-        this.rect(ctx,7,1,3,1,'#C0C0C0',s);
-        this.rect(ctx,6,2,3,1,'#C0C0C0',s);
-        this.rect(ctx,5,3,3,1,'#C0C0C0',s);
-        this.rect(ctx,4,4,3,1,'#C0C0C0',s);
-        this.rect(ctx,3,5,2,1,'#C0C0C0',s);
+        // 蛇矛高举过头（蓄力下劈）
+        this.rect(ctx,5,0,3,1,'#C0C0C0',s);
+        this.rect(ctx,4,1,4,1,'#C0C0C0',s);
+        this.rect(ctx,5,2,3,1,'#C0C0C0',s);
+        this.rect(ctx,6,3,2,1,'#C0C0C0',s);
+        this.rect(ctx,7,0,1,1,'#E8E8E8',s);
+        this.rect(ctx,7,1,1,1,'#E8E8E8',s);
         this.rect(ctx,6,2,1,1,'#E8E8E8',s);
-        this.rect(ctx,5,3,1,1,'#E8E8E8',s);
-        for (let r=5;r<=10;r++) this.rect(ctx,8,r,1,1,'#8B4513',s);
+        for (let r=4;r<=10;r++) this.rect(ctx,8,r,1,1,'#8B4513',s);
     },
     _zfAtkStrike(ctx, s) {
-        // 蛇矛前刺
-        this.rect(ctx,0,4,3,1,'#C0C0C0',s);
-        this.rect(ctx,0,5,3,1,'#C0C0C0',s);
-        this.rect(ctx,1,6,3,1,'#C0C0C0',s);
-        this.rect(ctx,2,7,2,1,'#C0C0C0',s);
-        this.rect(ctx,3,4,1,1,'#E8E8E8',s);
-        this.rect(ctx,3,5,1,1,'#E8E8E8',s);
-        for (let r=7;r<=11;r++) this.rect(ctx,4,r,1,1,'#8B4513',s);
+        // 蛇矛下劈
+        this.rect(ctx,7,8,3,1,'#C0C0C0',s);
+        this.rect(ctx,8,9,3,1,'#C0C0C0',s);
+        this.rect(ctx,9,10,3,1,'#C0C0C0',s);
+        this.rect(ctx,10,11,2,1,'#C0C0C0',s);
+        this.rect(ctx,9,8,1,1,'#E8E8E8',s);
+        this.rect(ctx,10,9,1,1,'#E8E8E8',s);
+        this.rect(ctx,11,10,1,1,'#E8E8E8',s);
+        for (let r=5;r<=9;r++) this.rect(ctx,6,r,1,1,'#8B4513',s);
     },
     _zfSkill1(ctx, s) {
         // 蛇矛高举，火焰聚集

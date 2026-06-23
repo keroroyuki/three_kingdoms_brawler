@@ -174,12 +174,12 @@ class Player {
         this.animFrame = 0;
         this.attackHitEnemies.clear();
         
-        // 设置攻击判定框
+        // 设置攻击判定框（从上往下劈）
         this.attackHitbox = {
-            x: this.facing === 1 ? this.x + this.width : this.x - 50,
-            y: this.y,
-            width: 50,
-            height: this.height
+            x: this.facing === 1 ? this.x + this.width - 20 : this.x - 40,
+            y: this.y - 20,
+            width: 60,
+            height: this.height + 20
         };
     }
 
