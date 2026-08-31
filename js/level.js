@@ -1,343 +1,106 @@
-// 三国战纪 - 关卡管理器 v2
-class LevelManager {
-    constructor(game) {
-        this.game = game;
-        this.currentLevel = 1;
-        this.currentSection = 0;
-        this.sections = [];
-        this.sectionTriggered = [];
-        this.areaNameTimer = 0;
-        this.areaName = '';
-    }
+/* ============================================================
+ * 三国战纪 · 关卡数据
+ * 每个关卡由若干「闸门波次」构成：走到触发线 → 锁屏 → 清怪 → 解锁前进
+ * ============================================================ */
+'use strict';
 
-    loadLevel(level) {
-        this.currentLevel = level;
-        this.currentSection = 0;
-        this.sectionTriggered = [];
-        
-        this.sections = this.getLevelSections(level);
+const LEVELS = [
+    {
+        id: 1,
+        name: '第一章 · 涿郡起兵',
+        sub: '黄巾举旗，桃园结义',
+        theme: 'plains',
+        music: 'plains',
+        length: 118,
+        intro: ['东汉末年，黄巾举旗。', '涿郡郊野，义军初起。'],
+        props: [
+            { k: 'crate', x: 9.5, z: 1.1 }, { k: 'crate', x: 9.8, z: 2.6, drop: 'baozi' },
+            { k: 'urn', x: 27, z: 0.8 }, { k: 'urn', x: 27.4, z: 3.0 },
+            { k: 'crate', x: 45, z: 1.6, drop: 'wine' }, { k: 'crate', x: 45.3, z: 2.8 },
+            { k: 'urn', x: 63, z: 0.9 }, { k: 'crate', x: 63.4, z: 2.4, drop: 'roast' },
+            { k: 'crate', x: 81, z: 1.4 }, { k: 'urn', x: 81.4, z: 2.9, drop: 'gold' }
+        ],
+        waves: [
+            { at: 15, spawn: [{ t: 'soldier', n: 3 }], hint: '黄巾散兵' },
+            { at: 32, spawn: [{ t: 'soldier', n: 2 }, { t: 'archer', n: 2 }], hint: '弓手上前' },
+            { at: 50, spawn: [{ t: 'soldier', n: 2 }, { t: 'shield', n: 2 }], hint: '刀盾结阵' },
+            { at: 68, spawn: [{ t: 'spear', n: 2 }, { t: 'shield', n: 1 }, { t: 'archer', n: 2 }], hint: '长矛压阵' },
+            { at: 86, spawn: [{ t: 'cavalry', n: 1 }, { t: 'soldier', n: 3 }, { t: 'archer', n: 1 }], hint: '铁骑突袭' }
+        ],
+        boss: { at: 104, type: 'zhangjue', title: '天公将军' }
+    },
+    {
+        id: 2,
+        name: '第二章 · 博望坡火攻',
+        sub: '烈焰焚营，伏兵四起',
+        theme: 'fire',
+        music: 'fire',
+        length: 122,
+        intro: ['博望坡上，火光冲天。', '曹军先锋，尽入彀中。'],
+        props: [
+            { k: 'crate', x: 10, z: 1.5, drop: 'baozi' }, { k: 'urn', x: 10.4, z: 2.7 },
+            { k: 'crate', x: 29, z: 0.9 }, { k: 'crate', x: 29.3, z: 2.9, drop: 'wine' },
+            { k: 'urn', x: 48, z: 1.8, drop: 'gold' }, { k: 'urn', x: 48.4, z: 3.0 },
+            { k: 'crate', x: 67, z: 1.2 }, { k: 'crate', x: 67.3, z: 2.6, drop: 'roast' },
+            { k: 'urn', x: 86, z: 1.5 }, { k: 'crate', x: 86.4, z: 2.8, drop: 'scroll' }
+        ],
+        waves: [
+            { at: 15, spawn: [{ t: 'spear', n: 2 }, { t: 'archer', n: 2 }], hint: '前锋哨卡' },
+            { at: 33, spawn: [{ t: 'soldier', n: 3 }, { t: 'firemage', n: 1 }], hint: '黄巾术士' },
+            { at: 51, spawn: [{ t: 'cavalry', n: 2 }, { t: 'shield', n: 2 }], hint: '铁骑冲阵' },
+            { at: 70, spawn: [{ t: 'firemage', n: 2 }, { t: 'spear', n: 2 }, { t: 'archer', n: 1 }], hint: '火矢如雨' },
+            { at: 89, spawn: [{ t: 'ironelite', n: 2 }, { t: 'elite', n: 2 }], hint: '精锐尽出' }
+        ],
+        boss: { at: 108, type: 'zhangbao', title: '地公将军' }
+    },
+    {
+        id: 3,
+        name: '第三章 · 洛阳宫城',
+        sub: '夜袭宫阙，黄天当立',
+        theme: 'palace',
+        music: 'palace',
+        length: 126,
+        intro: ['宫城夜战，火把如龙。', '天魔降世，黄天当立。'],
+        props: [
+            { k: 'urn', x: 10, z: 1.2, drop: 'wine' }, { k: 'crate', x: 10.3, z: 2.8 },
+            { k: 'crate', x: 30, z: 1.6, drop: 'roast' }, { k: 'urn', x: 30.4, z: 2.9 },
+            { k: 'crate', x: 50, z: 1.0 }, { k: 'crate', x: 50.3, z: 2.7, drop: 'scroll' },
+            { k: 'urn', x: 70, z: 1.8 }, { k: 'urn', x: 70.4, z: 3.0, drop: 'gold' },
+            { k: 'crate', x: 90, z: 1.3, drop: 'roast' }, { k: 'urn', x: 90.3, z: 2.6 }
+        ],
+        waves: [
+            { at: 15, spawn: [{ t: 'elite', n: 2 }, { t: 'shield', n: 2 }], hint: '禁卫巡守' },
+            { at: 33, spawn: [{ t: 'ironelite', n: 2 }, { t: 'archer', n: 2 }], hint: '铁甲当道' },
+            { at: 52, spawn: [{ t: 'cavalry', n: 2 }, { t: 'firemage', n: 2 }, { t: 'elite', n: 1 }], hint: '妖术乱舞' },
+            { at: 71, spawn: [{ t: 'ironelite', n: 3 }, { t: 'spear', n: 2 }], hint: '重甲方阵' },
+            { at: 92, spawn: [{ t: 'cavalry', n: 2 }, { t: 'ironelite', n: 2 }, { t: 'elite', n: 2 }], hint: '宫门死守' }
+        ],
+        boss: { at: 112, type: 'tianmo', title: '黄天之主' }
     }
+];
 
-    getLevelSections(level) {
-        if (level === 1) {
-            return [
-                {
-                    name: '涿郡城外',
-                    startX: 50,
-                    endX: 600,
-                    enemies: [
-                        { type: 'soldier', x: 350, y: 350 },
-                        { type: 'soldier', x: 450, y: 360 },
-                        { type: 'soldier', x: 550, y: 340 }
-                    ],
-                    items: [
-                        { type: 'smallBaozi', x: 300, y: 380 }
-                    ]
-                },
-                {
-                    name: '黄巾军营地',
-                    startX: 600,
-                    endX: 1200,
-                    enemies: [
-                        { type: 'soldier', x: 750, y: 350 },
-                        { type: 'archer', x: 850, y: 360 },
-                        { type: 'soldier', x: 950, y: 340 },
-                        { type: 'shield', x: 1100, y: 350 }
-                    ],
-                    items: [
-                        { type: 'bigBaozi', x: 700, y: 380 },
-                        { type: 'wine', x: 1050, y: 380 }
-                    ]
-                },
-                {
-                    name: '山寨大门',
-                    startX: 1200,
-                    endX: 1800,
-                    enemies: [
-                        { type: 'shield', x: 1350, y: 350 },
-                        { type: 'spear', x: 1450, y: 360 },
-                        { type: 'soldier', x: 1550, y: 340 },
-                        { type: 'soldier', x: 1650, y: 350 },
-                        { type: 'archer', x: 1750, y: 360 }
-                    ],
-                    items: [
-                        { type: 'smallBaozi', x: 1300, y: 380 },
-                        { type: 'chicken', x: 1600, y: 380 }
-                    ]
-                },
-                {
-                    name: '山寨内部',
-                    startX: 1800,
-                    endX: 2400,
-                    enemies: [
-                        { type: 'shield', x: 1950, y: 350 },
-                        { type: 'spear', x: 2050, y: 360 },
-                        { type: 'soldier', x: 2150, y: 340 },
-                        { type: 'soldier', x: 2250, y: 350 },
-                        { type: 'shield', x: 2350, y: 360 }
-                    ],
-                    items: [
-                        { type: 'bigBaozi', x: 1900, y: 380 },
-                        { type: 'wine', x: 2200, y: 380 }
-                    ]
-                },
-                {
-                    name: '张角老巢 - BOSS战',
-                    startX: 2400,
-                    endX: 3200,
-                    enemies: [
-                        { type: 'zhangjue', x: 2800, y: 320 }
-                    ],
-                    items: [
-                        { type: 'chicken', x: 2500, y: 380 },
-                        { type: 'bigBaozi', x: 2600, y: 380 }
-                    ],
-                    isBoss: true
-                }
-            ];
-        } else if (level === 2) {
-            return [
-                {
-                    name: '博望坡入口',
-                    startX: 50,
-                    endX: 700,
-                    enemies: [
-                        { type: 'soldier', x: 300, y: 350 },
-                        { type: 'soldier', x: 450, y: 360 },
-                        { type: 'elite', x: 600, y: 340 }
-                    ],
-                    items: [
-                        { type: 'smallBaozi', x: 200, y: 380 },
-                        { type: 'wine', x: 500, y: 380 }
-                    ]
-                },
-                {
-                    name: '燃烧的树林',
-                    startX: 700,
-                    endX: 1400,
-                    enemies: [
-                        { type: 'firemage', x: 850, y: 350 },
-                        { type: 'soldier', x: 950, y: 360 },
-                        { type: 'elite', x: 1100, y: 340 },
-                        { type: 'firemage', x: 1250, y: 350 }
-                    ],
-                    items: [
-                        { type: 'bigBaozi', x: 800, y: 380 },
-                        { type: 'chicken', x: 1200, y: 380 }
-                    ]
-                },
-                {
-                    name: '火攻阵',
-                    startX: 1400,
-                    endX: 2100,
-                    enemies: [
-                        { type: 'elite', x: 1550, y: 350 },
-                        { type: 'firemage', x: 1650, y: 360 },
-                        { type: 'cavalry', x: 1800, y: 340 },
-                        { type: 'soldier', x: 1900, y: 350 },
-                        { type: 'elite', x: 2000, y: 360 }
-                    ],
-                    items: [
-                        { type: 'smallBaozi', x: 1500, y: 380 },
-                        { type: 'wine', x: 1850, y: 380 },
-                        { type: 'bigBaozi', x: 2050, y: 380 }
-                    ]
-                },
-                {
-                    name: '博望坡峡谷',
-                    startX: 2100,
-                    endX: 2800,
-                    enemies: [
-                        { type: 'cavalry', x: 2250, y: 350 },
-                        { type: 'firemage', x: 2350, y: 360 },
-                        { type: 'elite', x: 2450, y: 340 },
-                        { type: 'cavalry', x: 2550, y: 350 },
-                        { type: 'firemage', x: 2650, y: 360 }
-                    ],
-                    items: [
-                        { type: 'chicken', x: 2200, y: 380 },
-                        { type: 'bigBaozi', x: 2600, y: 380 }
-                    ]
-                },
-                {
-                    name: '张宝 - BOSS战',
-                    startX: 2800,
-                    endX: 3600,
-                    enemies: [
-                        { type: 'zhangbao', x: 3200, y: 320 }
-                    ],
-                    items: [
-                        { type: 'chicken', x: 2900, y: 380 },
-                        { type: 'bigBaozi', x: 3050, y: 380 }
-                    ],
-                    isBoss: true
-                }
-            ];
-        } else if (level === 3) {
-            return [
-                {
-                    name: '洛阳城门',
-                    startX: 50,
-                    endX: 800,
-                    enemies: [
-                        { type: 'elite', x: 300, y: 350 },
-                        { type: 'elite', x: 500, y: 360 },
-                        { type: 'elite', x: 700, y: 340 }
-                    ],
-                    items: [
-                        { type: 'bigBaozi', x: 200, y: 370 },
-                        { type: 'wine', x: 550, y: 370 }
-                    ]
-                },
-                {
-                    name: '宫城外围',
-                    startX: 800,
-                    endX: 1600,
-                    enemies: [
-                        { type: 'ironelite', x: 950, y: 350 },
-                        { type: 'cavalry', x: 1050, y: 360 },
-                        { type: 'elite', x: 1250, y: 340 },
-                        { type: 'ironelite', x: 1450, y: 350 }
-                    ],
-                    items: [
-                        { type: 'bigBaozi', x: 900, y: 370 },
-                        { type: 'chicken', x: 1350, y: 370 }
-                    ]
-                },
-                {
-                    name: '禁宫回廊',
-                    startX: 1600,
-                    endX: 2400,
-                    enemies: [
-                        { type: 'ironelite', x: 1750, y: 350 },
-                        { type: 'firemage', x: 1850, y: 360 },
-                        { type: 'cavalry', x: 2000, y: 340 },
-                        { type: 'elite', x: 2100, y: 350 },
-                        { type: 'ironelite', x: 2250, y: 360 }
-                    ],
-                    items: [
-                        { type: 'smallBaozi', x: 1700, y: 370 },
-                        { type: 'wine', x: 2050, y: 370 },
-                        { type: 'chicken', x: 2200, y: 370 }
-                    ]
-                },
-                {
-                    name: '大殿前庭',
-                    startX: 2400,
-                    endX: 3200,
-                    enemies: [
-                        { type: 'ironelite', x: 2550, y: 350 },
-                        { type: 'cavalry', x: 2650, y: 360 },
-                        { type: 'firemage', x: 2750, y: 340 },
-                        { type: 'ironelite', x: 2850, y: 350 },
-                        { type: 'cavalry', x: 3000, y: 360 }
-                    ],
-                    items: [
-                        { type: 'chicken', x: 2500, y: 370 },
-                        { type: 'bigBaozi', x: 2900, y: 370 },
-                        { type: 'wine', x: 3100, y: 370 }
-                    ]
-                },
-                {
-                    name: '天魔张角 - 最终BOSS',
-                    startX: 3200,
-                    endX: 4000,
-                    enemies: [
-                        { type: 'tianmo', x: 3600, y: 310 }
-                    ],
-                    items: [
-                        { type: 'chicken', x: 3300, y: 370 },
-                        { type: 'bigBaozi', x: 3450, y: 370 }
-                    ],
-                    isBoss: true
-                }
-            ];
-        }
-        return [];
-    }
+/** 每关敌人强度成长 */
+const LEVEL_SCALE = [
+    { hp: 1.00, atk: 1.00, tokens: 2 },
+    { hp: 1.28, atk: 1.22, tokens: 3 },
+    { hp: 1.62, atk: 1.45, tokens: 3 }
+];
 
-    checkProgress() {
-        if (!this.game.player) return;
-        
-        const playerX = this.game.player.x;
-        
-        for (let i = 0; i < this.sections.length; i++) {
-            const section = this.sections[i];
-            
-            if (playerX >= section.startX && playerX < section.endX && !this.sectionTriggered[i]) {
-                this.triggerSection(i);
-                break;
-            }
-        }
-        
-        // 检查BOSS是否被击败
-        if (this.currentSection === this.sections.length - 1) {
-            const bossSection = this.sections[this.currentSection];
-            if (bossSection.isBoss && this.sectionTriggered[this.currentSection]) {
-                const bossTypes = ['zhangjue', 'zhangbao', 'tianmo'];
-                const boss = this.game.enemies.find(e => bossTypes.includes(e.type));
-                if (!boss) {
-                    this.game.victory();
-                }
-            }
+/** 生成波次刷怪表（带入场位置） */
+function buildSpawnList(wave, waveX, levelIndex) {
+    const list = [];
+    let i = 0;
+    for (const grp of wave.spawn) {
+        for (let k = 0; k < grp.n; k++) {
+            const fromFront = (i % 2 === 0);
+            list.push({
+                type: grp.t,
+                x: waveX + (fromFront ? U.rand(5.2, 7.6) : -U.rand(4.6, 6.8)),
+                z: U.rand(0.55, 3.05),
+                delay: 0.12 * i + U.rand(0, 0.16)
+            });
+            i++;
         }
     }
-
-    triggerSection(index) {
-        this.currentSection = index;
-        this.sectionTriggered[index] = true;
-        
-        const section = this.sections[index];
-        
-        // 显示区域名称
-        this.showAreaName(section.name);
-        
-        // 生成敌人
-        section.enemies.forEach(enemy => {
-            this.game.spawnEnemy(enemy.type, enemy.x, enemy.y);
-        });
-        
-        // 生成道具
-        section.items.forEach(item => {
-            this.game.spawnItem(item.type, item.x, item.y);
-        });
-    }
-
-    showAreaName(name) {
-        this.areaName = name;
-        this.areaNameTimer = 2.5;
-    }
-
-    updateAreaName(dt) {
-        if (this.areaNameTimer > 0) {
-            this.areaNameTimer -= dt;
-        }
-    }
-
-    renderAreaName(ctx) {
-        if (this.areaNameTimer <= 0) return;
-        
-        const alpha = Math.min(1, this.areaNameTimer / 0.5);
-        const scale = 1 + (1 - alpha) * 0.2;
-        
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        
-        // 背景条
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(200, 280, 400, 60);
-        
-        // 边框
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(200, 280, 400, 60);
-        
-        // 文字
-        ctx.fillStyle = '#FFD700';
-        ctx.font = 'bold 32px "Microsoft YaHei", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(this.areaName, 400, 320);
-        
-        ctx.restore();
-    }
+    return list;
 }
