@@ -157,9 +157,6 @@ const SKILL_DEFS = {
     }
 };
 
-/* 占位（pose 回调里的静态时间） */
-const p_time_placeholder = 0;
-
 class Player extends Actor {
     constructor(game, cfg) {
         super(game, Object.assign({ team: TEAM.HERO, z: 2.0 }, cfg));

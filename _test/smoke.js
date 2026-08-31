@@ -480,6 +480,16 @@ async function waitState(page, want, ms, label) {
     await page.keyboard.press('Escape'); await page.waitForTimeout(250);
     s = await probe(page);
     check('失焦暂停可恢复', s.state === 'play', s.state);
+    // 守护：失焦时音频上下文被 suspend，恢复后应能被唤醒（否则游戏 BGM/音效永久静音）
+    const audioWake = await page.evaluate(() => {
+        try {
+            const a = window.GAME.audio;
+            a.resume();                       // 模拟恢复路径中的唤醒
+            a.play('swing');                  // 不应抛错
+            return { ok: true, ctxState: a.ctx ? a.ctx.state : 'none' };
+        } catch (e) { return { ok: false, err: String(e) }; }
+    });
+    check('失焦恢复后音频可唤醒', audioWake.ok && audioWake.err === undefined, JSON.stringify(audioWake));
 
     // 16e. M 键静音开关
     const m0 = await page.evaluate('window.GAME.audio.muted');

@@ -535,9 +535,11 @@ class Game {
             case ST.PAUSE:
                 if (inp.justPressed('up')) { this.pauseIndex = (this.pauseIndex + 3) % 4; this.audio.play('cursor'); }
                 if (inp.justPressed('down')) { this.pauseIndex = (this.pauseIndex + 1) % 4; this.audio.play('cursor'); }
-                if (inp.justPressed('pause')) { this.state = ST.PLAY; this.audio.play('confirm'); this.input.flush(); }
+                if (inp.justPressed('pause')) { this.state = ST.PLAY; this.audio.play('confirm'); this.audio.resume(); this.input.flush(); }
                 if (inp.justPressed('start')) {
                     this.audio.play('confirm');
+                    // 失焦自动暂停时音频上下文已被 suspend，操作暂停菜单（恢复/重开/返回标题）时统一唤醒
+                    this.audio.resume();
                     this.input.flush();
                     if (this.pauseIndex === 0) this.state = ST.PLAY;
                     else if (this.pauseIndex === 1) { this.player.lives = Math.max(1, this.player.lives); this.loadLevel(this.levelIndex); }
