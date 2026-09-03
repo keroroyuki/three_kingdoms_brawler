@@ -156,41 +156,61 @@ class PlainsScene extends Scene {
 
     _mid() {
         const W = this.width, H = 200, cv = mkCanvas(W, H), c = cv.getContext('2d');
-        const scale = Math.max(1, W / 1600);
+        // 沿路布点：间距必须是「屏幕距离」而非再乘一次画布缩放，
+        // 否则间距被放大 scale 倍，大半元素会落到画布之外，中景变得空荡
+        const row = (spacing, offset, draw) => {
+            const n = Math.max(2, Math.floor(W / spacing));
+            for (let i = 0; i < n; i++) {
+                draw(offset + i * spacing + U.hash(i * 5.5 + spacing) * spacing * 0.30, i);
+            }
+        };
         // 远树带
         c.fillStyle = '#3E6141';
-        for (let i = 0; i < Math.round(70 * scale); i++) {
+        const treeN = Math.round(W / 24);
+        for (let i = 0; i < treeN; i++) {
             const x = U.hash(i * 1.7) * W, h = 22 + U.hash(i * 3.1) * 26;
             c.beginPath();
             c.ellipse(x, 196 - h * 0.5, 11 + U.hash(i) * 6, h * 0.62, 0, 0, TAU);
             c.fill();
         }
-        // 桃林（粉花树）
-        const trees = Math.max(14, Math.round(14 * scale));
-        for (let i = 0; i < trees; i++) {
-            const x = (i / trees) * W + U.hash(i * 5.5) * 60;
-            const s = 0.8 + U.hash(i * 2.2) * 0.55;
-            this._blossomTree(c, x, 198, s);
-        }
+        // 桃林（第一关「桃园结义」的时令之花）
+        row(150, 40, (x, i) => this._blossomTree(c, x, 198, 0.80 + U.hash(i * 2.2) * 0.55));
         // 坞堡：汉末豪强筑墙自守的庄园，点题乱世
-        const forts = Math.max(2, Math.round(2 * scale));
-        for (let i = 0; i < forts; i++) {
-            const x = 340 + i * 900 * scale + U.hash(i * 7) * 70;
-            this._blockhouse(c, x, 198, 0.82 + U.hash(i * 4) * 0.22);
-        }
+        row(1500, 340, (x, i) => this._blockhouse(c, x, 198, 0.82 + U.hash(i * 4) * 0.22));
         // 烽燧：边塞报警高台
-        const beacons = Math.max(2, Math.round(2 * scale));
-        for (let i = 0; i < beacons; i++) {
-            const x = 620 + i * 1000 * scale + U.hash(i * 13) * 60;
-            this._beacon(c, x, 198, 0.78 + U.hash(i * 6) * 0.28);
-        }
+        row(1800, 620, (x, i) => this._beacon(c, x, 198, 0.78 + U.hash(i * 6) * 0.28));
         // 农舍
-        const houses = Math.max(4, Math.round(4 * scale));
-        for (let i = 0; i < houses; i++) {
-            const x = 180 + i * 420 * scale + U.hash(i * 9) * 90;
-            this._cottage(c, x, 198, 0.9 + U.hash(i * 4) * 0.3);
-        }
+        row(420, 180, (x, i) => this._cottage(c, x, 198, 0.90 + U.hash(i * 4) * 0.30));
+        // 黄巾旗：竿立道旁，点题「苍天已死，黄天当立」
+        row(620, 260, (x, i) => this._banner(c, x, 198, 0.85 + U.hash(i * 8) * 0.30));
         return cv;
+    }
+
+    /** 黄巾军旗：黄底皂书「天」字，旗缘战损撕裂 */
+    _banner(c, x, y, s) {
+        c.save(); c.translate(x, y); c.scale(s, s);
+        // 旗杆
+        c.fillStyle = '#4E3B2A'; c.fillRect(-2.5, -76, 5, 76);
+        // 竿首旄羽
+        c.fillStyle = '#8D6E63';
+        c.beginPath(); c.moveTo(0, -82); c.lineTo(6, -72); c.lineTo(-6, -72); c.closePath(); c.fill();
+        // 旗面：黄底，右缘撕裂缺口
+        c.fillStyle = '#D9A520';
+        c.beginPath();
+        c.moveTo(3, -76); c.lineTo(48, -71);
+        c.lineTo(41, -58); c.lineTo(50, -48); c.lineTo(39, -38); c.lineTo(48, -30);
+        c.lineTo(3, -27);
+        c.closePath(); c.fill();
+        c.fillStyle = 'rgba(120,80,16,0.30)'; c.fillRect(3, -40, 45, 4);
+        // 皂书「天」字：两横一撇一捺
+        c.strokeStyle = 'rgba(38,24,10,0.80)'; c.lineWidth = 2.6; c.lineCap = 'round';
+        c.beginPath();
+        c.moveTo(10, -66); c.lineTo(38, -65);
+        c.moveTo(14, -56); c.lineTo(34, -55);
+        c.moveTo(24, -61); c.lineTo(15, -40);
+        c.moveTo(24, -61); c.lineTo(33, -41);
+        c.stroke();
+        c.restore();
     }
 
     _blossomTree(c, x, y, s) {
@@ -467,6 +487,12 @@ class FireScene extends Scene {
         return cv;
     }
 
+    /** 坡脊高度：整数个周期的正弦叠加，保证首尾同高，平铺处不会出现台阶 */
+    _slopeY(x) {
+        const W = this.width;
+        return 54 + Math.sin(x / W * TAU * 3) * 15 + Math.sin(x / W * TAU * 7 + 1.3) * 6;
+    }
+
     /** 烧毁的辎重车：火烧博望坡所焚的正是曹军粮草车仗 */
     _wreckedWagon(c, x, y, s) {
         c.save(); c.translate(x, y); c.scale(s, s);
@@ -508,9 +534,31 @@ class FireScene extends Scene {
 
     _mid() {
         const W = this.width, H = 210, cv = mkCanvas(W, H), c = cv.getContext('2d');
-        const scale = Math.max(1, W / 1600);
-        // 焦黑树林剪影
-        for (let i = 0; i < Math.round(54 * scale); i++) {
+        // 沿路布点：间距用屏幕距离，不随画布宽度二次放大
+        const row = (spacing, offset, draw) => {
+            const n = Math.max(2, Math.floor(W / spacing));
+            for (let i = 0; i < n; i++) {
+                draw(offset + i * spacing + U.hash(i * 4.7 + spacing) * spacing * 0.28, i);
+            }
+        };
+        // 博望坡：南阳岗丘，伏兵正藏于坡后
+        c.fillStyle = '#1A0E0B';
+        c.beginPath();
+        c.moveTo(0, 210);
+        for (let x = 0; x <= W; x += 30) c.lineTo(x, 210 - this._slopeY(x));
+        c.lineTo(W, 210 - this._slopeY(W)); c.lineTo(W, 210);
+        c.closePath(); c.fill();
+        // 坡脊受火光照亮的暖边
+        c.strokeStyle = 'rgba(255,120,40,0.20)'; c.lineWidth = 2;
+        c.beginPath();
+        for (let x = 0; x <= W; x += 30) {
+            const y = 210 - this._slopeY(x);
+            if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        }
+        c.stroke();
+        // 焦黑树林剪影（立于坡前）
+        const treeN = Math.round(W / 26);
+        for (let i = 0; i < treeN; i++) {
             const x = U.hash(i * 1.9) * W;
             const h = 40 + U.hash(i * 4.4) * 90;
             c.strokeStyle = '#1C0F0C';
@@ -521,22 +569,16 @@ class FireScene extends Scene {
             c.beginPath(); c.moveTo(x + 2, 210 - h * 0.62); c.lineTo(x + 16 + U.hash(i) * 12, 210 - h * 0.9); c.stroke();
         }
         // 烧毁的营帐残骸
-        const tents = Math.max(5, Math.round(5 * scale));
-        for (let i = 0; i < tents; i++) {
-            const x = 120 + i * 340 * scale + U.hash(i * 6) * 100;
+        row(480, 120, (x, i) => {
             c.fillStyle = '#241511';
             c.beginPath();
             c.moveTo(x - 34, 210); c.lineTo(x, 150 + U.hash(i) * 20); c.lineTo(x + 34, 210);
             c.closePath(); c.fill();
             c.strokeStyle = '#140B09'; c.lineWidth = 3;
             c.beginPath(); c.moveTo(x - 10, 210); c.lineTo(x - 22, 176); c.stroke();
-        }
+        });
         // 焚毁的辎重车仗，散落道旁
-        const wagons = Math.max(4, Math.round(4 * scale));
-        for (let i = 0; i < wagons; i++) {
-            const x = 250 + i * 430 * scale + U.hash(i * 11) * 90;
-            this._wreckedWagon(c, x, 208, 0.8 + U.hash(i * 5) * 0.3);
-        }
+        row(700, 250, (x, i) => this._wreckedWagon(c, x, 208, 0.80 + U.hash(i * 5) * 0.30));
         return cv;
     }
 
@@ -719,12 +761,11 @@ class PalaceScene extends Scene {
 
     _far() {
         const W = this.width, H = 230, cv = mkCanvas(W, H), c = cv.getContext('2d');
-        const scale = Math.max(1, W / 1500);
-        // 远处宫殿群剪影
-        c.fillStyle = '#1B2A52';
-        const n = Math.max(9, Math.round(9 * scale));
+        // 远处宫殿群剪影：按固定间距铺满整幅，避免只堆在画布左端
+        const n = Math.max(6, Math.round(W / 175));
+        const step = W / n;
         for (let i = 0; i < n; i++) {
-            const x = (i / n) * W + U.hash(i * 4) * 40;
+            const x = (i + 0.5) * step;
             this._palace(c, x, 232, 0.55 + U.hash(i * 3) * 0.45, '#1B2A52', '#24365F');
         }
         const mg = c.createLinearGradient(0, 150, 0, 232);
@@ -829,7 +870,6 @@ class PalaceScene extends Scene {
 
     _mid() {
         const W = this.width, H = 250, cv = mkCanvas(W, H), c = cv.getContext('2d');
-        const scale = Math.max(1, W / 1600);
         // 宫墙
         c.fillStyle = '#7A1F1C'; c.fillRect(0, 150, W, 100);
         c.fillStyle = '#5E1512';
@@ -837,10 +877,10 @@ class PalaceScene extends Scene {
         c.fillStyle = '#C9A227'; c.fillRect(0, 146, W, 6);
         c.fillStyle = '#2B2B2B'; c.fillRect(0, 152, W, 6);
         // 宫门 + 角楼
-        const gates = Math.max(4, Math.round(4 * scale));
-        const gateSpacing = 400 * scale;
+        const gates = Math.max(4, Math.round(W / 1200));
+        const gateSpacing = W / gates;
         for (let i = 0; i < gates; i++) {
-            const x = 200 + i * gateSpacing;
+            const x = gateSpacing * (0.5 + i);
             // 城台（夯土包砖）
             c.fillStyle = '#6E1B18'; c.fillRect(x - 58, 168, 116, 82);
             c.fillStyle = 'rgba(82,18,15,0.55)';
@@ -876,9 +916,11 @@ class PalaceScene extends Scene {
                 c.restore();
             });
         }
-        // 石灯
-        for (let i = 0; i < Math.round(10 * scale); i++) {
-            const x = 90 + i * 165 * scale + U.hash(i) * 40;
+        // 石灯：沿宫墙内侧等距排布
+        const lamps = Math.max(6, Math.round(W / 560));
+        const lampStep = W / lamps;
+        for (let i = 0; i < lamps; i++) {
+            const x = lampStep * (0.5 + i) + U.hash(i) * 30;
             c.fillStyle = '#8A8F96'; c.fillRect(x - 6, 196, 12, 54);
             c.fillStyle = '#A6ABB2'; c.fillRect(x - 13, 176, 26, 22);
             c.fillStyle = '#FFD79A'; c.fillRect(x - 8, 181, 16, 12);
@@ -922,11 +964,12 @@ class PalaceScene extends Scene {
 
     _fore() {
         const W = 12000, H = 130, cv = mkCanvas(W, H), c = cv.getContext('2d');
-        const scale = Math.max(1, W / 900);
-        const n = Math.max(7, Math.round(7 * scale));
+        // 间距固定为屏幕距离；若再乘画布缩放，一屏内几乎看不到垂幔
+        const n = Math.max(6, Math.round(W / 190));
+        const step = W / n;
         // 顶部红绸 + 檐角
         for (let i = 0; i < n; i++) {
-            const x = 60 + i * 140 * scale;
+            const x = step * (0.5 + i);
             c.fillStyle = '#6E1512';
             c.beginPath();
             c.moveTo(x - 40, 0); c.lineTo(x + 40, 0);
