@@ -637,12 +637,34 @@ class UI {
     drawVictory(ctx) {
         const g = this.g, p = g.player;
         ctx.save();
-        ctx.fillStyle = 'rgba(8,6,4,0.92)';
+        // 渐变夜幕：上浓下淡，让身后洛阳宫城夜景仍可读（纯 0.92 黑会把场景全盖住）
+        const scrim = ctx.createLinearGradient(0, 0, 0, VIEW.H);
+        scrim.addColorStop(0, 'rgba(8,6,4,0.88)');
+        scrim.addColorStop(0.45, 'rgba(8,6,4,0.55)');
+        scrim.addColorStop(1, 'rgba(10,8,5,0.22)');
+        ctx.fillStyle = scrim;
         ctx.fillRect(0, 0, VIEW.W, VIEW.H);
+        // 主角身后一束暖光（克敌凯旋的舞台感）
+        if (p) {
+            const px = p.sx(g.cam), py = p.cy(g.cam) - 60;
+            const glow = ctx.createRadialGradient(px, py, 10, px, py, 150);
+            glow.addColorStop(0, 'rgba(255,214,140,0.30)');
+            glow.addColorStop(1, 'rgba(255,214,140,0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(px - 150, py - 150, 300, 300);
+        }
         txt(ctx, '天 下 已 定', VIEW.W / 2, 150, 60, C.gold, 'center', { stroke: C.ink, strokeW: 10 });
         txt(ctx, '黄天已破，汉室重光。', VIEW.W / 2, 196, 18, U.rgba(C.white, 0.86), 'center', { weight: 500 });
 
         const bonus = g.computeBonus();
+        // 结算文字底板：夜景透出后保证数字可读
+        const panelH = 120 + bonus.length * 34 + 70;
+        ctx.fillStyle = 'rgba(6,5,3,0.62)';
+        ctx.strokeStyle = 'rgba(201,162,39,0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(VIEW.W / 2 - 210, 244, 420, panelH);
+        ctx.fill(); ctx.stroke();
         let y = 262;
         bonus.forEach((b, i) => {
             const app = U.clamp((g.resultT - 0.25 - i * 0.16) / 0.3, 0, 1);

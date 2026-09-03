@@ -944,7 +944,7 @@ const Fig = {
         const OUT = Fig.OUTLINE, OLW = 0.02;
         const steel = look.steel || '#D6DBE0';
         const steelD = U.shade(steel, -0.3);
-        const steelL = U.shade(steel, 0.35);
+        const steelL = look.steelLight || U.shade(steel, 0.35);
         const wood = look.wood || '#6D4C33';
         const gripC = look.grip || '#8D6E63';
         const shape = (fill, lw) => {
@@ -1002,7 +1002,8 @@ const Fig = {
                     ctx.beginPath(); ctx.moveTo(gx, -0.022); ctx.lineTo(gx + 0.014, 0.022); ctx.stroke();
                 }
                 guard(0, 0.13);
-                blade(0.98, 0.062, 0.030, steel, steelL, true);
+                // 剑身修长（基宽 0.042），过宽会像铲子
+                blade(0.98, 0.042, 0.020, steel, steelL, true);
                 // 剑首环
                 ctx.beginPath(); ctx.arc(-0.045, 0, 0.038, 0, TAU);
                 ctx.lineWidth = 0.016; ctx.strokeStyle = look.trim || '#C9A227'; ctx.stroke();
@@ -1023,7 +1024,7 @@ const Fig = {
                     ctx.beginPath(); ctx.moveTo(gx, -0.020); ctx.lineTo(gx + 0.014, 0.020); ctx.stroke();
                 }
                 guard(0, 0.11);
-                blade(0.68, 0.055, 0.026, steel, steelL, true);
+                blade(0.68, 0.040, 0.018, steel, steelL, true);
                 ctx.beginPath(); ctx.arc(-0.038, 0, 0.032, 0, TAU);
                 ctx.lineWidth = 0.014; ctx.strokeStyle = look.trim || '#C9A227'; ctx.stroke();
                 const jw2 = Math.sin((o.time || 0) * 4.4 + 1.2) * 0.014;
@@ -1045,26 +1046,26 @@ const Fig = {
                 });
                 // 刀背倒刺（小枝，偃月刀形制标志）
                 ctx.beginPath();
-                ctx.moveTo(0.94, -0.058); ctx.lineTo(1.00, -0.108); ctx.lineTo(1.06, -0.052);
+                ctx.moveTo(0.97, -0.052); ctx.lineTo(1.02, -0.100); ctx.lineTo(1.08, -0.070);
                 ctx.closePath(); shape(steel, 0.016);
                 // 刀身（新月）
                 ctx.beginPath();
-                ctx.moveTo(0.86, -0.03);
-                ctx.quadraticCurveTo(1.24, -0.30, 1.30, 0.02);
-                ctx.quadraticCurveTo(1.22, 0.10, 0.86, 0.05);
+                ctx.moveTo(0.88, -0.045);
+                ctx.quadraticCurveTo(1.10, -0.055, 1.32, -0.10);
+                ctx.quadraticCurveTo(1.14, 0.06, 0.88, 0.030);
                 ctx.closePath();
                 shape(steel);
                 // 刃面高光
                 ctx.beginPath();
-                ctx.moveTo(0.90, -0.05);
-                ctx.quadraticCurveTo(1.16, -0.24, 1.20, -0.03);
-                ctx.lineTo(0.92, -0.01);
+                ctx.moveTo(0.92, -0.038);
+                ctx.quadraticCurveTo(1.12, -0.048, 1.26, -0.082);
+                ctx.lineTo(1.20, -0.030);
                 ctx.closePath();
                 ctx.fillStyle = steelL; ctx.fill();
                 // 刃口银线
                 ctx.beginPath();
-                ctx.moveTo(0.88, 0.042);
-                ctx.quadraticCurveTo(1.18, 0.09, 1.28, 0.022);
+                ctx.moveTo(0.90, 0.024);
+                ctx.quadraticCurveTo(1.14, 0.052, 1.30, -0.082);
                 ctx.lineWidth = 0.012; ctx.strokeStyle = U.rgba('#FFFFFF', 0.72); ctx.stroke();
                 // 龙吞口：龙头衔刃
                 ctx.beginPath();

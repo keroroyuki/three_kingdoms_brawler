@@ -812,13 +812,14 @@ class Game {
         ctx.restore();
     }
 
-    /** 标题 / 选人界面的武将展示 */
+    /** 标题 / 选人界面的武将展示（标题页右移，避免压住中央菜单） */
     drawIdleHero(ctx) {
         const key = this.state === ST.SELECT ? Object.keys(HERO_KIT)[this.selectIndex] : 'guanyu';
         const look = LOOKS[key];
         const t = this.ui.t;
+        const hx = this.state === ST.TITLE ? VIEW.W / 2 + 168 : VIEW.W / 2;
         ctx.save();
-        ctx.translate(VIEW.W / 2, VIEW.H - 92);
+        ctx.translate(hx, VIEW.H - 92);
         const k = this.state === ST.TITLE ? 132 : 108;
         ctx.scale(k, k);
         ctx.translate(0, -FOOT_OFF);

@@ -37,7 +37,8 @@ const LOOKS = {
         head: 'topknot', hair: '#1A1410', bandColor: '#1B5E20',
         beard: 'long', beardColor: '#1A1410',
         robeStyle: 'long', cape: '#8B0000',
-        weapon: 'guandao', wood: '#5D4037', steel: '#E0E6EA',
+        // 青龙偃月刀：刃带青冷之色，故名「青龙」
+        weapon: 'guandao', wood: '#5D4037', steel: '#D9E8EC', steelLight: '#EFF8FA',
         desc: '青龙偃月刀 · 力量型',
         stats: { hp: 145, atk: 21, spd: 150, reach: 1.45 }
     },
