@@ -1141,6 +1141,62 @@ const Fig = {
                 ctx.fillStyle = look.tassel || '#D32F2F'; ctx.fill();
                 break;
             }
+            case 'ji': { // 方天画戟：中锋直刺 + 两侧月牙小枝，汉末最典型的实战长兵
+                // 漆杆
+                ctx.beginPath();
+                ctx.moveTo(-0.52, -0.023); ctx.lineTo(1.04, -0.023);
+                ctx.lineTo(1.04, 0.023); ctx.lineTo(-0.52, 0.023);
+                ctx.closePath(); shape(wood);
+                // 握把缠绳
+                ctx.strokeStyle = U.rgba('#2B1B12', 0.55); ctx.lineWidth = 0.008;
+                for (let i = 0; i < 7; i++) {
+                    const gx = -0.26 + i * 0.028;
+                    ctx.beginPath(); ctx.moveTo(gx, -0.023); ctx.lineTo(gx + 0.014, 0.023); ctx.stroke();
+                }
+                // 杆尾铜鐏
+                ctx.beginPath();
+                ctx.moveTo(-0.52, -0.026); ctx.lineTo(-0.40, -0.026);
+                ctx.lineTo(-0.40, 0.026); ctx.lineTo(-0.52, 0.026);
+                ctx.closePath(); shape(look.trim || '#C9A227');
+                // 中锋：柳叶直刃，双棱起脊
+                ctx.beginPath();
+                ctx.moveTo(1.02, -0.040);
+                ctx.quadraticCurveTo(1.30, -0.034, 1.66, 0);
+                ctx.quadraticCurveTo(1.30, 0.034, 1.02, 0.040);
+                ctx.lineTo(1.06, 0);
+                ctx.closePath(); shape(steel);
+                ctx.beginPath();
+                ctx.moveTo(1.06, -0.020);
+                ctx.quadraticCurveTo(1.30, -0.016, 1.56, 0);
+                ctx.lineTo(1.06, 0.004);
+                ctx.closePath(); ctx.fillStyle = steelL; ctx.fill();
+                // 两侧月牙小枝：画戟之「画」，左右各一，刃口朝外
+                [-1, 1].forEach((d) => {
+                    ctx.beginPath();
+                    ctx.moveTo(1.00, d * 0.022);
+                    ctx.quadraticCurveTo(1.10, d * 0.150, 1.30, d * 0.088);
+                    ctx.quadraticCurveTo(1.16, d * 0.086, 1.14, d * 0.020);
+                    ctx.closePath(); shape(steel);
+                    ctx.beginPath();
+                    ctx.moveTo(1.04, d * 0.070);
+                    ctx.quadraticCurveTo(1.12, d * 0.140, 1.26, d * 0.086);
+                    ctx.lineWidth = 0.010; ctx.strokeStyle = U.rgba('#FFFFFF', 0.70); ctx.stroke();
+                });
+                // 戟座铜箍
+                ctx.beginPath();
+                ctx.moveTo(0.96, -0.034); ctx.lineTo(1.06, -0.034);
+                ctx.lineTo(1.06, 0.034); ctx.lineTo(0.96, 0.034);
+                ctx.closePath(); shape(look.trim || '#C9A227');
+                // 红缨：画戟之饰
+                const jw = Math.sin((o.time || 0) * 5.4) * 0.022;
+                ctx.beginPath();
+                ctx.moveTo(1.00, -0.02);
+                ctx.quadraticCurveTo(1.04 + jw, 0.03, 0.94 + jw * 2, 0.085);
+                ctx.quadraticCurveTo(1.06, 0.035, 1.00, 0.03);
+                ctx.closePath();
+                ctx.fillStyle = look.tassel || '#C62828'; ctx.fill();
+                break;
+            }
             case 'fan': { // 白鹤羽扇：柄 + 羽轴 + 羽枝分叉
                 // 扇柄（竹节柄）
                 ctx.beginPath(); ctx.moveTo(-0.06, -0.019); ctx.lineTo(0.17, -0.019); ctx.lineTo(0.17, 0.019); ctx.lineTo(-0.06, 0.019); ctx.closePath();
@@ -1232,13 +1288,49 @@ const Fig = {
                 break;
             }
             case 'bow': {
+                // 汉式长梢反曲弓：弓臂外凸，两端硬梢向前反折
                 ctx.beginPath();
-                ctx.moveTo(0.0, -0.34);
-                ctx.quadraticCurveTo(0.30, 0, 0.0, 0.34);
-                ctx.lineWidth = 0.045; ctx.strokeStyle = wood; ctx.stroke();
-                ctx.lineWidth = 0.014; ctx.strokeStyle = OUT; ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0, -0.34); ctx.lineTo(0, 0.34);
+                ctx.moveTo(-0.06, -0.46);
+                ctx.quadraticCurveTo(0.32, -0.22, 0.32, 0);
+                ctx.quadraticCurveTo(0.32, 0.22, -0.06, 0.46);
+                ctx.lineWidth = 0.05; ctx.strokeStyle = wood; ctx.stroke();
+                ctx.lineWidth = 0.016; ctx.strokeStyle = OUT; ctx.stroke();
+                // 弓梢
+                ctx.lineWidth = 0.044; ctx.strokeStyle = U.shade(wood, -0.28);
+                ctx.beginPath();
+                ctx.moveTo(-0.06, -0.46); ctx.lineTo(0.08, -0.56);
+                ctx.moveTo(-0.06, 0.46); ctx.lineTo(0.08, 0.56);
+                ctx.stroke();
+                // 弓弦
+                ctx.beginPath();
+                ctx.moveTo(0.08, -0.56); ctx.lineTo(0.08, 0.56);
                 ctx.lineWidth = 0.012; ctx.strokeStyle = '#ECEFF1'; ctx.stroke();
+                // 弓弣（缠皮革的握把）
+                ctx.beginPath();
+                ctx.moveTo(0.27, -0.11); ctx.lineTo(0.34, -0.11);
+                ctx.lineTo(0.34, 0.11); ctx.lineTo(0.27, 0.11);
+                ctx.closePath();
+                ctx.fillStyle = look.grip || '#6D4C33'; ctx.fill();
+                ctx.lineWidth = 0.014; ctx.strokeStyle = OUT; ctx.stroke();
+                ctx.strokeStyle = U.rgba('#2B1B12', 0.5); ctx.lineWidth = 0.009;
+                [-0.05, 0.01, 0.07].forEach((by) => {
+                    ctx.beginPath(); ctx.moveTo(0.27, by); ctx.lineTo(0.34, by); ctx.stroke();
+                });
+                // 搭箭：箭杆横贯弓弣，簇尖探出弓臂之外
+                ctx.beginPath();
+                ctx.moveTo(-0.14, 0.05); ctx.lineTo(0.62, -0.02);
+                ctx.lineWidth = 0.018; ctx.strokeStyle = '#A1887F'; ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0.62, -0.038); ctx.lineTo(0.76, -0.017);
+                ctx.lineTo(0.62, 0.004); ctx.closePath();
+                ctx.fillStyle = steel; ctx.fill();
+                ctx.lineWidth = 0.012; ctx.strokeStyle = OUT; ctx.stroke();
+                // 箭羽
+                ctx.beginPath();
+                ctx.moveTo(-0.14, 0.05); ctx.lineTo(-0.02, -0.03); ctx.lineTo(-0.04, 0.085);
+                ctx.closePath();
+                ctx.fillStyle = '#ECEFF1'; ctx.fill();
+                ctx.lineWidth = 0.010; ctx.strokeStyle = OUT; ctx.stroke();
                 break;
             }
             case 'axe': {

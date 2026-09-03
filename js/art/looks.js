@@ -224,7 +224,8 @@ const LOOKS = {
         pants: '#4A148C', boot: '#1B2429',
         head: 'helm', hair: '#2B1B12', plume: '#D32F2F',
         robeStyle: 'long', cape: '#4A148C',
-        weapon: 'guandao', steel: '#D6DBE0', wood: '#3E2723',
+        // 使方天画戟（汉末典型实战长兵），与关羽的青龙偃月刀区分开
+        weapon: 'ji', steel: '#D6DBE0', wood: '#3E2723', tassel: '#D32F2F',
         // 地公将军：张角之弟，凶悍武夫，浓眉环眼
         face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.44 },
         boss: true,

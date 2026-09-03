@@ -212,28 +212,69 @@ class Breakable {
         ctx.scale(k, k);
         const OUT = '#2B1B12';
         if (this.kind === 'crate') {
+            // 粮草辎重箱：箱板竖纹 + 麻绳十字捆绑 + 朱色封条
             ctx.fillStyle = '#A9793F';
             ctx.fillRect(-16, -30, 32, 30);
             ctx.lineWidth = 2.4; ctx.strokeStyle = OUT;
             ctx.strokeRect(-16, -30, 32, 30);
-            ctx.strokeStyle = '#7A5527'; ctx.lineWidth = 2.6;
+            ctx.strokeStyle = 'rgba(90,60,24,0.45)'; ctx.lineWidth = 1.6;
             ctx.beginPath();
-            ctx.moveTo(-16, -30); ctx.lineTo(16, 0);
-            ctx.moveTo(16, -30); ctx.lineTo(-16, 0);
+            ctx.moveTo(-5.5, -30); ctx.lineTo(-5.5, 0);
+            ctx.moveTo(5.5, -30); ctx.lineTo(5.5, 0);
             ctx.stroke();
             ctx.strokeStyle = U.rgba('#FFFFFF', 0.18); ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(-13, -27); ctx.lineTo(13, -27); ctx.stroke();
+            // 麻绳：两横一纵，深色描边压出绳股
+            const rope = (w, col) => {
+                ctx.strokeStyle = col; ctx.lineWidth = w;
+                ctx.beginPath();
+                ctx.moveTo(-16, -22); ctx.lineTo(16, -22);
+                ctx.moveTo(-16, -8); ctx.lineTo(16, -8);
+                ctx.moveTo(0, -30); ctx.lineTo(0, 0);
+                ctx.stroke();
+            };
+            rope(3.2, '#C7A96A');
+            rope(1.1, 'rgba(70,48,18,0.55)');
+            // 封条
+            ctx.fillStyle = '#B71C1C';
+            ctx.fillRect(-4.5, -19, 9, 13);
+            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(60,10,10,0.55)';
+            ctx.strokeRect(-4.5, -19, 9, 13);
         } else {
+            // 灰陶酒坛：双系耳 + 红布封口
             ctx.beginPath();
             ctx.moveTo(-13, 0); ctx.quadraticCurveTo(-16, -18, -8, -25);
             ctx.lineTo(8, -25); ctx.quadraticCurveTo(16, -18, 13, 0);
             ctx.closePath();
             ctx.fillStyle = '#9E8E77'; ctx.fill();
             ctx.lineWidth = 2.2; ctx.strokeStyle = OUT; ctx.stroke();
-            ctx.fillStyle = '#7A6B57'; ctx.fillRect(-9, -28, 18, 4);
-            ctx.strokeRect(-9, -28, 18, 4);
+            // 肩部双系耳
+            ctx.strokeStyle = OUT; ctx.lineWidth = 2;
+            [-1, 1].forEach((d) => {
+                ctx.beginPath();
+                ctx.arc(d * 13.5, -18, 4,
+                    d > 0 ? -Math.PI * 0.5 : Math.PI * 0.5,
+                    d > 0 ? Math.PI * 0.7 : Math.PI * 1.5, false);
+                ctx.stroke();
+            });
             ctx.strokeStyle = U.rgba('#FFFFFF', 0.16); ctx.lineWidth = 2.4;
             ctx.beginPath(); ctx.moveTo(-8, -18); ctx.lineTo(-6, -4); ctx.stroke();
+            // 封口红布：坛口盖布 + 两侧垂角
+            ctx.fillStyle = '#B71C1C';
+            ctx.beginPath();
+            ctx.moveTo(-9, -26); ctx.quadraticCurveTo(-13, -19, -8, -16);
+            ctx.lineTo(-4, -25); ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(9, -26); ctx.quadraticCurveTo(13, -19, 8, -16);
+            ctx.lineTo(4, -25); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#8B0000';
+            ctx.beginPath(); ctx.ellipse(0, -25.5, 9.5, 4.2, 0, 0, TAU); ctx.fill();
+            ctx.lineWidth = 1.8; ctx.strokeStyle = OUT; ctx.stroke();
+            // 扎绳
+            ctx.strokeStyle = '#C7A96A'; ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(-9.5, -23.5); ctx.quadraticCurveTo(0, -22, 9.5, -23.5);
+            ctx.stroke();
         }
         ctx.restore();
     }
