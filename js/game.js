@@ -104,10 +104,18 @@ class Game {
         c.style.width = Math.round(VIEW.W * s) + 'px';
         c.style.height = Math.round(VIEW.H * s) + 'px';
 
-        // 后备缓冲跟随实际显示尺寸：放大到大屏或高分屏时角色与文字仍然锐利。
-        // 上限 2 倍以控制填充率（背景层仍为 1x 预渲染，属可接受的柔和）。
+        // 后备缓冲倍率。
+        // 重要：这里刻意不让缓冲跟随任意缩放比。实测表明，非整数倍的
+        // ctx.scale() 会让每帧的每一次绘制都走慢速光栅化路径——在软件渲染
+        // 环境（--disable-gpu / 虚拟机 / 远程桌面 / 低端机）下帧率会从 55 FPS
+        // 掉到 8 FPS，相差近 7 倍。
+        // 因此策略为：默认 1:1 绘制（快速路径），仅当放大显著或高分屏时才
+        // 提升到 2×（此时用户通常有大屏且带 GPU 加速，代价可承受），
+        // 并在运行期监测到持续低帧率时自动降级回 1×。
         const dpr = window.devicePixelRatio || 1;
-        const r = Math.min(2, Math.max(1, s * dpr));
+        const want = s * dpr;
+        let r = 1;
+        if (!this._perfCapped && want >= 1.75) r = 2;
         const bw = Math.round(VIEW.W * r), bh = Math.round(VIEW.H * r);
         this.renderScale = r;
         if (c.width !== bw || c.height !== bh) {
@@ -115,6 +123,28 @@ class Game {
             // 改变尺寸会重置上下文状态，这里恢复需要的绘制属性
             this.ctx.imageSmoothingEnabled = true;
             this.ctx.imageSmoothingQuality = 'high';
+        }
+    }
+
+    /**
+     * 运行期性能监测：连续两个 1.5s 采样窗口在战斗状态下低于 48 FPS，
+     * 就把后备缓冲从 2× 降回 1×（降级后不再回升，避免反复抖动）。
+     * 传入的是未经钳制的真实帧间隔，否则 dt 上限会把低帧率"美化"成 20 FPS。
+     */
+    _monitorPerf(rawDt) {
+        if (this._perfCapped) return;
+        if ((this.renderScale || 1) <= 1) return;
+        const m = this._perf || (this._perf = { t: 0, n: 0, bad: 0 });
+        m.t += rawDt;
+        m.n++;
+        if (m.t < 1.5) return;
+        const fps = m.n / m.t;
+        // 只在战斗态判定：标题/暂停等静态画面帧率低不代表渲染压力
+        if (this.state === ST.PLAY) m.bad = fps < 48 ? m.bad + 1 : 0;
+        m.t = 0; m.n = 0;
+        if (m.bad >= 2) {
+            this._perfCapped = true;
+            this._fitCanvas();
         }
     }
 
@@ -434,12 +464,14 @@ class Game {
         this.frames = 0;
         const loop = (now) => {
             let dt = (now - this._last) / 1000;
+            const rawDt = dt;
             this._last = now;
             if (dt > 0.05) dt = 0.05;
             if (dt < 0) dt = 0;
             try {
                 this.frame(dt);
                 this.frames++;
+                this._monitorPerf(rawDt);
             } catch (e) {
                 // 单帧异常不应冻结整个游戏：记录一次后继续
                 if (!this._errCount) this._errCount = 0;

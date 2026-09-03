@@ -4,6 +4,19 @@
  * ============================================================ */
 'use strict';
 
+/**
+ * 各动作的输入缓冲时长（秒）。
+ * 缓冲越长，硬直/落地途中按下的键越容易在恢复后自动生效。
+ * 必杀技是低频高价值操作，给 380ms 容错；连招类保持短缓冲以维持节奏精准。
+ */
+const INPUT_BUFFER = {
+    skill: 0.38,
+    jump: 0.18,
+    attack: 0.16,
+    guard: 0.20,
+    dash: 0.18
+};
+
 const KEY_MAP = {
     'KeyA': 'left', 'ArrowLeft': 'left',
     'KeyD': 'right', 'ArrowRight': 'right',
@@ -70,7 +83,8 @@ class InputManager {
         if (this.held[action]) return;
         this.held[action] = true;
         this.pressed[action] = true;
-        this.buffer[action] = 0.16; // 160ms 输入缓冲窗口
+        // 输入缓冲窗口：必杀技给更长的容错，避免硬直/落地途中按键被吞
+        this.buffer[action] = INPUT_BUFFER[action] || 0.16;
 
         // 双击检测（仅方向键）
         if (action === 'left' || action === 'right') {

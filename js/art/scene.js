@@ -172,6 +172,18 @@ class PlainsScene extends Scene {
             const s = 0.8 + U.hash(i * 2.2) * 0.55;
             this._blossomTree(c, x, 198, s);
         }
+        // 坞堡：汉末豪强筑墙自守的庄园，点题乱世
+        const forts = Math.max(2, Math.round(2 * scale));
+        for (let i = 0; i < forts; i++) {
+            const x = 340 + i * 900 * scale + U.hash(i * 7) * 70;
+            this._blockhouse(c, x, 198, 0.82 + U.hash(i * 4) * 0.22);
+        }
+        // 烽燧：边塞报警高台
+        const beacons = Math.max(2, Math.round(2 * scale));
+        for (let i = 0; i < beacons; i++) {
+            const x = 620 + i * 1000 * scale + U.hash(i * 13) * 60;
+            this._beacon(c, x, 198, 0.78 + U.hash(i * 6) * 0.28);
+        }
         // 农舍
         const houses = Math.max(4, Math.round(4 * scale));
         for (let i = 0; i < houses; i++) {
@@ -194,6 +206,68 @@ class PlainsScene extends Scene {
         });
         c.fillStyle = 'rgba(255,255,255,0.35)';
         c.beginPath(); c.arc(-6, -72, 9, 0, TAU); c.fill();
+        c.restore();
+    }
+
+    /** 坞堡：东汉末年豪强筑高墙自守的庄园，夯土墙 + 四角角楼 + 门楼 */
+    _blockhouse(c, x, y, s) {
+        c.save(); c.translate(x, y); c.scale(s, s);
+        // 夯土高墙
+        c.fillStyle = '#9E8B6E'; c.fillRect(-56, -40, 112, 40);
+        // 夯层纹理
+        c.fillStyle = 'rgba(105,88,64,0.42)';
+        for (let i = 0; i < 5; i++) c.fillRect(-56, -38 + i * 8, 112, 1.6);
+        // 墙头女墙（垛口）
+        c.fillStyle = '#7A6A50'; c.fillRect(-56, -46, 112, 7);
+        for (let i = -54; i < 54; i += 16) c.fillRect(i, -53, 9, 8);
+        // 两侧角楼
+        [-1, 1].forEach((d) => {
+            const bx = d * 50;
+            c.fillStyle = '#8A7659'; c.fillRect(bx - 11, -70, 22, 26);
+            // 悬山顶
+            c.fillStyle = '#4E3B2A';
+            c.beginPath();
+            c.moveTo(bx - 18, -70); c.lineTo(bx, -85); c.lineTo(bx + 18, -70); c.closePath(); c.fill();
+            // 箭窗
+            c.fillStyle = '#3A2C1E'; c.fillRect(bx - 3, -62, 6, 9);
+        });
+        // 中央门楼（重檐）
+        c.fillStyle = '#6D5B42'; c.fillRect(-18, -66, 36, 26);
+        c.fillStyle = '#3E2E20'; c.fillRect(-9, -52, 18, 12);
+        c.fillStyle = '#4E3B2A';
+        c.beginPath();
+        c.moveTo(-27, -66); c.quadraticCurveTo(0, -79, 27, -66);
+        c.quadraticCurveTo(0, -60, -27, -66); c.closePath(); c.fill();
+        c.fillStyle = '#C9A227'; c.fillRect(-27, -67, 54, 3);
+        c.restore();
+    }
+
+    /** 烽燧：边塞报警的夯土高台，顶设望楼，举烟示警 */
+    _beacon(c, x, y, s) {
+        c.save(); c.translate(x, y); c.scale(s, s);
+        // 梯形夯土台
+        c.fillStyle = '#96826A';
+        c.beginPath();
+        c.moveTo(-23, 0); c.lineTo(-13, -74); c.lineTo(13, -74); c.lineTo(23, 0);
+        c.closePath(); c.fill();
+        // 夯层
+        c.fillStyle = 'rgba(105,88,64,0.40)';
+        for (let i = 0; i < 7; i++) {
+            const w = 23 - (i / 7) * 9;
+            c.fillRect(-w, -70 + i * 10, w * 2, 1.5);
+        }
+        // 顶部望楼
+        c.fillStyle = '#7A6A50'; c.fillRect(-10, -90, 20, 17);
+        c.fillStyle = '#3A2C1E'; c.fillRect(-4, -84, 8, 8);
+        c.fillStyle = '#4E3B2A';
+        c.beginPath(); c.moveTo(-16, -90); c.lineTo(0, -102); c.lineTo(16, -90); c.closePath(); c.fill();
+        // 烽烟一柱
+        c.fillStyle = 'rgba(205,205,205,0.30)';
+        c.beginPath();
+        c.moveTo(-4, -101);
+        c.quadraticCurveTo(-12, -114, -3, -128);
+        c.quadraticCurveTo(7, -119, 4, -101);
+        c.closePath(); c.fill();
         c.restore();
     }
 
@@ -393,6 +467,45 @@ class FireScene extends Scene {
         return cv;
     }
 
+    /** 烧毁的辎重车：火烧博望坡所焚的正是曹军粮草车仗 */
+    _wreckedWagon(c, x, y, s) {
+        c.save(); c.translate(x, y); c.scale(s, s);
+        // 坍塌倾斜的车厢
+        c.fillStyle = '#2A1812';
+        c.beginPath();
+        c.moveTo(-30, -6); c.lineTo(-24, -34); c.lineTo(22, -30); c.lineTo(28, -8);
+        c.closePath(); c.fill();
+        // 车板缝隙
+        c.strokeStyle = '#160C08'; c.lineWidth = 2;
+        for (let i = -20; i < 22; i += 11) {
+            c.beginPath(); c.moveTo(i, -32); c.lineTo(i - 2, -8); c.stroke();
+        }
+        // 车轮（带辐条）
+        [[-18, 1], [16, 0.72]].forEach(([wx, ws]) => {
+            c.save(); c.translate(wx, -2); c.scale(1, ws);
+            c.strokeStyle = '#241410'; c.lineWidth = 3.4;
+            c.beginPath(); c.arc(0, 0, 13, 0, TAU); c.stroke();
+            c.lineWidth = 1.8;
+            for (let k = 0; k < 5; k++) {
+                const a = k * Math.PI / 5;
+                c.beginPath();
+                c.moveTo(Math.cos(a) * 12, Math.sin(a) * 12);
+                c.lineTo(-Math.cos(a) * 12, -Math.sin(a) * 12);
+                c.stroke();
+            }
+            c.restore();
+        });
+        // 折断的车辕
+        c.strokeStyle = '#241410'; c.lineWidth = 3.4;
+        c.beginPath(); c.moveTo(24, -22); c.lineTo(47, -13); c.stroke();
+        // 车内余烬
+        c.fillStyle = 'rgba(255,120,40,0.32)';
+        c.beginPath(); c.arc(-6, -15, 6, 0, TAU); c.fill();
+        c.fillStyle = 'rgba(255,190,90,0.30)';
+        c.beginPath(); c.arc(-4, -17, 2.6, 0, TAU); c.fill();
+        c.restore();
+    }
+
     _mid() {
         const W = this.width, H = 210, cv = mkCanvas(W, H), c = cv.getContext('2d');
         const scale = Math.max(1, W / 1600);
@@ -417,6 +530,12 @@ class FireScene extends Scene {
             c.closePath(); c.fill();
             c.strokeStyle = '#140B09'; c.lineWidth = 3;
             c.beginPath(); c.moveTo(x - 10, 210); c.lineTo(x - 22, 176); c.stroke();
+        }
+        // 焚毁的辎重车仗，散落道旁
+        const wagons = Math.max(4, Math.round(4 * scale));
+        for (let i = 0; i < wagons; i++) {
+            const x = 250 + i * 430 * scale + U.hash(i * 11) * 90;
+            this._wreckedWagon(c, x, 208, 0.8 + U.hash(i * 5) * 0.3);
         }
         return cv;
     }
@@ -615,30 +734,96 @@ class PalaceScene extends Scene {
         return cv;
     }
 
-    /** 单层宫殿（重檐庑殿顶） */
-    _palace(c, x, y, s, body, roof) {
-        c.save(); c.translate(x, y); c.scale(s, s);
-        c.fillStyle = body; c.fillRect(-52, -54, 104, 54);
-        c.fillStyle = 'rgba(255,210,120,0.55)';
-        for (let i = -44; i < 44; i += 22) c.fillRect(i, -44, 11, 17);
-        // 下层檐
+    /** 屋檐：飞檐翘角 + 筒瓦竖垄 + 檐口瓦当 */
+    _eave(c, halfW, yBase, rise, roof, tile) {
         c.fillStyle = roof;
         c.beginPath();
-        c.moveTo(-72, -54);
-        c.quadraticCurveTo(-40, -64, 0, -66);
-        c.quadraticCurveTo(40, -64, 72, -54);
-        c.quadraticCurveTo(40, -50, 0, -50);
-        c.quadraticCurveTo(-40, -50, -72, -54);
+        c.moveTo(-halfW, yBase);
+        c.quadraticCurveTo(-halfW * 0.55, yBase - rise, 0, yBase - rise * 1.06);
+        c.quadraticCurveTo(halfW * 0.55, yBase - rise, halfW, yBase);
+        // 飞檐翘角：两端向上反曲
+        c.quadraticCurveTo(halfW * 0.58, yBase - rise * 0.18, halfW * 0.84, yBase - rise * 0.62);
+        c.quadraticCurveTo(halfW * 0.40, yBase + rise * 0.30, 0, yBase + rise * 0.34);
+        c.quadraticCurveTo(-halfW * 0.40, yBase + rise * 0.30, -halfW * 0.84, yBase - rise * 0.62);
+        c.quadraticCurveTo(-halfW * 0.58, yBase - rise * 0.18, -halfW, yBase);
         c.closePath(); c.fill();
-        c.fillRect(-40, -92, 80, 28);
-        // 上层檐
+        // 筒瓦：顺坡而下的竖垄
+        c.strokeStyle = tile; c.lineWidth = 1.1;
+        for (let i = -5; i <= 5; i++) {
+            const kx = (i / 5) * halfW * 0.88;
+            c.beginPath();
+            c.moveTo(kx * 0.30, yBase - rise * 1.00);
+            c.quadraticCurveTo(kx * 0.80, yBase - rise * 0.42, kx, yBase + rise * 0.20);
+            c.stroke();
+        }
+        // 檐口瓦当（一排圆头）
+        c.fillStyle = tile;
+        for (let i = -5; i <= 5; i++) {
+            const kx = (i / 5) * halfW * 0.82;
+            c.beginPath(); c.arc(kx, yBase + rise * 0.26, 1.5, 0, TAU); c.fill();
+        }
+    }
+
+    /** 鸱吻：正脊两端龙首吞脊，中国宫殿最标志性的屋脊装饰 */
+    _chiwen(c, x, y, s, color) {
+        c.save(); c.translate(x, y); c.scale(s, s);
+        c.fillStyle = color;
+        // 龙首（张口吞脊）
         c.beginPath();
-        c.moveTo(-60, -92);
-        c.quadraticCurveTo(-30, -104, 0, -108);
-        c.quadraticCurveTo(30, -104, 60, -92);
-        c.quadraticCurveTo(30, -88, 0, -88);
-        c.quadraticCurveTo(-30, -88, -60, -92);
+        c.moveTo(-6, 0); c.lineTo(-3, -9); c.lineTo(4, -11);
+        c.lineTo(7, -5); c.lineTo(3, -3); c.lineTo(5, 1); c.lineTo(-4, 3);
         c.closePath(); c.fill();
+        // 向内卷曲的龙尾
+        c.beginPath();
+        c.moveTo(-6, -1);
+        c.quadraticCurveTo(-13, -6, -9, -12);
+        c.quadraticCurveTo(-5, -15, -2, -10);
+        c.lineWidth = 1.6; c.strokeStyle = color; c.stroke();
+        c.restore();
+    }
+
+    /** 斗拱：檐下层层出跳的木构件，汉唐宫殿的核心特征 */
+    _dougong(c, halfW, y, color, dark) {
+        c.fillStyle = color;
+        c.fillRect(-halfW, y, halfW * 2, 3.2);
+        c.fillStyle = dark;
+        const n = Math.max(4, Math.round(halfW / 9));
+        for (let i = 0; i <= n; i++) {
+            const bx = -halfW + (i / n) * halfW * 2;
+            c.fillRect(bx - 1.6, y, 3.2, 5.4);        // 昂（斜出跳）
+            c.fillRect(bx - 3.2, y + 4.6, 6.4, 2.6);  // 散斗
+        }
+    }
+
+    /** 单层宫殿（重檐庑殿顶 + 鸱吻 + 斗拱） */
+    _palace(c, x, y, s, body, roof) {
+        c.save(); c.translate(x, y); c.scale(s, s);
+        const tile = 'rgba(255,225,170,0.30)';
+        // 台基
+        c.fillStyle = 'rgba(210,200,190,0.22)'; c.fillRect(-58, -6, 116, 8);
+        // 殿身
+        c.fillStyle = body; c.fillRect(-52, -54, 104, 54);
+        // 窗棂（直棂窗）
+        c.fillStyle = 'rgba(255,210,120,0.55)';
+        for (let i = -44; i < 44; i += 15) c.fillRect(i, -44, 9, 17);
+        // 檐下斗拱
+        this._dougong(c, 56, -58, '#B8860B', '#6D4C1F');
+        // 下层檐
+        this._eave(c, 72, -54, 12, roof, tile);
+        // 正脊 + 鸱吻
+        c.fillStyle = roof; c.fillRect(-46, -92, 92, 30);
+        this._chiwen(c, -46, -92, 1.0, '#8C6D3F');                    // 左吻
+        c.save(); c.translate(46, -92); c.scale(-1, 1);                // 右吻（镜像，尾朝外）
+        this._chiwen(c, 0, 0, 1.0, '#8C6D3F'); c.restore();
+        // 上层斗拱
+        this._dougong(c, 40, -96, '#B8860B', '#6D4C1F');
+        // 上层檐
+        this._eave(c, 60, -92, 16, roof, tile);
+        // 顶层正脊与宝顶
+        c.fillStyle = roof; c.fillRect(-26, -114, 52, 8);
+        c.fillStyle = '#C9A227';
+        c.beginPath(); c.arc(0, -118, 4.2, 0, TAU); c.fill();
+        c.fillRect(-1.4, -126, 2.8, 9);
         c.restore();
     }
 
@@ -656,27 +841,40 @@ class PalaceScene extends Scene {
         const gateSpacing = 400 * scale;
         for (let i = 0; i < gates; i++) {
             const x = 200 + i * gateSpacing;
-            // 门洞
+            // 城台（夯土包砖）
+            c.fillStyle = '#6E1B18'; c.fillRect(x - 58, 168, 116, 82);
+            c.fillStyle = 'rgba(82,18,15,0.55)';
+            for (let k = -58; k < 58; k += 13) c.fillRect(x + k, 168, 2, 82);
+            // 门洞（券门）
             c.fillStyle = '#2A0E0C';
             c.beginPath();
-            c.moveTo(x - 40, 250); c.lineTo(x - 40, 176);
-            c.quadraticCurveTo(x, 148, x + 40, 176); c.lineTo(x + 40, 250);
+            c.moveTo(x - 34, 250); c.lineTo(x - 34, 188);
+            c.quadraticCurveTo(x, 160, x + 34, 188); c.lineTo(x + 34, 250);
             c.closePath(); c.fill();
-            // 门钉
+            // 门钉（九路门钉，宫门制）
             c.fillStyle = '#C9A227';
             for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) {
-                c.beginPath(); c.arc(x - 24 + k * 16, 196 + r * 16, 2.4, 0, TAU); c.fill();
+                c.beginPath(); c.arc(x - 21 + k * 14, 199 + r * 15, 2.2, 0, TAU); c.fill();
             }
-            // 屋檐
-            c.fillStyle = '#1F3A6E';
-            c.beginPath();
-            c.moveTo(x - 66, 162);
-            c.quadraticCurveTo(0 + x - 30, 146, x, 138);
-            c.quadraticCurveTo(x + 30, 146, x + 66, 162);
-            c.quadraticCurveTo(x + 30, 154, x, 152);
-            c.quadraticCurveTo(x - 30, 154, x - 66, 162);
-            c.closePath(); c.fill();
-            c.fillStyle = '#C9A227'; c.fillRect(x - 66, 160, 132, 4);
+            // 檐下斗拱 + 城楼屋檐（以原点为中心绘制，故先平移至门轴）
+            c.save(); c.translate(x, 0);
+            this._dougong(c, 50, 168, '#B8860B', '#6D4C1F');
+            this._eave(c, 66, 162, 22, '#1F3A6E', 'rgba(255,225,170,0.30)');
+            c.restore();
+            // 正脊与鸱吻
+            c.fillStyle = '#1F3A6E'; c.fillRect(x - 32, 128, 64, 13);
+            this._chiwen(c, x - 32, 128, 1.0, '#C9A227');
+            c.save(); c.translate(x + 32, 128); c.scale(-1, 1);
+            this._chiwen(c, 0, 0, 1.0, '#C9A227'); c.restore();
+            // 两侧子阙（汉阙形制：母阙 + 子阙）
+            [-1, 1].forEach((d) => {
+                const qx = x + d * 76;
+                c.save(); c.translate(qx, 0);
+                c.fillStyle = '#6E1B18'; c.fillRect(-9, 198, 18, 52);
+                c.fillStyle = 'rgba(82,18,15,0.5)'; c.fillRect(-9, 198, 18, 4);
+                this._eave(c, 17, 198, 10, '#1F3A6E', 'rgba(255,225,170,0.26)');
+                c.restore();
+            });
         }
         // 石灯
         for (let i = 0; i < Math.round(10 * scale); i++) {

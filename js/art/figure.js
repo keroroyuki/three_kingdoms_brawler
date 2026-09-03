@@ -499,51 +499,233 @@ const Fig = {
         ctx.fillStyle = look.trim || '#FFD700'; ctx.fill();
     },
 
+    /* 脸型预设：rx/ry 控制头颅椭圆，jawR 控制下颌宽度（越大越方阔），jawY 控制下颌长度 */
+    FACE_SHAPES: {
+        round:  { rx: 0.98, ry: 0.94, jawR: 0.54, jawY: 0.86 }, // 面如冠玉（刘备）
+        long:   { rx: 0.86, ry: 1.04, jawR: 0.42, jawY: 0.94 }, // 长脸威严（关羽）
+        square: { rx: 0.97, ry: 0.98, jawR: 0.74, jawY: 0.93 }, // 豹头环眼（张飞）
+        oval:   { rx: 0.89, ry: 1.00, jawR: 0.36, jawY: 0.92 }  // 清秀俊朗（赵云/诸葛亮）
+    },
+
+    /* 脸型轮廓：上颅为圆，下颌宽度由 jawR 决定，从而区分方圆瘦削。
+     * jawR 可由外观配置的 face.jaw 覆盖（张飞的「豹头」等），不传则用脸型默认值。 */
+    _facePath(ctx, hx, hy, R, P, jawOverride) {
+        const jr = (jawOverride != null) ? jawOverride : P.jawR;
+        ctx.beginPath();
+        ctx.moveTo(hx + P.rx * R, hy - 0.01 * R);
+        // 上颅
+        ctx.bezierCurveTo(
+            hx + P.rx * R, hy - P.ry * R * 1.34,
+            hx - P.rx * R, hy - P.ry * R * 1.34,
+            hx - P.rx * R, hy - 0.01 * R);
+        // 下颌（jr 越大越方阔）
+        ctx.bezierCurveTo(
+            hx - P.rx * R * (0.58 + jr * 0.52), hy + P.jawY * R * 0.70,
+            hx - jr * R, hy + P.jawY * R * 0.94,
+            hx - jr * R * 0.44, hy + P.jawY * R);
+        // 下巴
+        ctx.quadraticCurveTo(hx, hy + P.jawY * R * 1.12, hx + jr * R * 0.44, hy + P.jawY * R);
+        ctx.bezierCurveTo(
+            hx + jr * R, hy + P.jawY * R * 0.94,
+            hx + P.rx * R * (0.58 + jr * 0.52), hy + P.jawY * R * 0.70,
+            hx + P.rx * R, hy - 0.01 * R);
+        ctx.closePath();
+    },
+
+    /* 耳朵：刘备「两耳垂肩」是演义最鲜明的体貌特征 */
+    _ears(ctx, look, hx, hy, R, shape, skin, skinD) {
+        const kind = (look.face && look.face.ears) || 'normal';
+        // 耳廓中心放在头轮廓外侧（≈0.88R），否则会被脸型路径整体覆盖
+        const ex = hx - R * 0.88, ey = hy + R * 0.02;
+        if (kind === 'long') {
+            // 大而长的耳廓
+            ctx.beginPath();
+            ctx.ellipse(ex, ey, R * 0.30, R * 0.44, 0.28, 0, TAU);
+            shape(skinD);
+            // 垂至肩头的耳垂
+            ctx.beginPath();
+            ctx.ellipse(ex - R * 0.05, ey + R * 0.40, R * 0.175, R * 0.235, 0.32, 0, TAU);
+            shape(skin);
+            // 内廓阴影
+            ctx.beginPath();
+            ctx.ellipse(ex + R * 0.045, ey - R * 0.02, R * 0.115, R * 0.235, 0.28, 0, TAU);
+            ctx.fillStyle = U.rgba('#000000', 0.13); ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.ellipse(ex, ey, R * 0.235, R * 0.315, 0.28, 0, TAU);
+            shape(skinD);
+            ctx.beginPath();
+            ctx.ellipse(ex + R * 0.035, ey, R * 0.095, R * 0.17, 0.28, 0, TAU);
+            ctx.fillStyle = U.rgba('#000000', 0.13); ctx.fill();
+        }
+    },
+
     _head(ctx, look, s, B, time, o, shape, skin, skinD) {
         const R = SK.headR * B;
+        const F = look.face || {};
+        const P = Fig.FACE_SHAPES[F.shape] || Fig.FACE_SHAPES.oval;
+        const hx = s.head.x, hy = s.head.y;
+
         // 脖子
-        U.capsule(ctx, s.neck.x, s.neck.y + 0.03, s.head.x, s.head.y + 0.08, 0.10 * B, 0.10 * B);
+        U.capsule(ctx, s.neck.x, s.neck.y + 0.03, hx, hy + 0.08, 0.10 * B, 0.10 * B);
         shape(skinD);
 
-        // 头
-        ctx.beginPath();
-        ctx.ellipse(s.head.x, s.head.y, R * 0.92, R, 0, 0, TAU);
+        // 耳朵（在头颅之下，先画）
+        Fig._ears(ctx, look, hx, hy, R, shape, skin, skinD);
+
+        // 脸（face.jaw 覆盖脸型默认的下颌宽度，用于「豹头」「方面」等特型）
+        Fig._facePath(ctx, hx, hy, R, P, F.jaw);
         shape(skin);
 
-        // 面部朝向：+x 为正前方
-        const fx = s.head.x, fy = s.head.y;
-        const eyeY = fy - 0.015;
-        // 眉
-        ctx.fillStyle = look.brow || '#2B1B12';
-        ctx.fillRect(fx - 0.015, fy - 0.075, 0.085, 0.020);
-        ctx.fillRect(fx + 0.055, fy - 0.082, 0.075, 0.020);
-        // 眼
-        const blink = (Math.sin(time * 1.3 + (o.phase || 0)) > 0.985) ? 0.2 : 1;
-        ctx.fillStyle = '#1A1015';
-        ctx.beginPath(); ctx.ellipse(fx + 0.040, eyeY, 0.026, 0.034 * blink, 0, 0, TAU); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(fx + 0.108, eyeY - 0.003, 0.024, 0.032 * blink, 0, 0, TAU); ctx.fill();
-        if (blink > 0.5) {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath(); ctx.arc(fx + 0.048, eyeY - 0.012, 0.009, 0, TAU); ctx.fill();
-            ctx.beginPath(); ctx.arc(fx + 0.115, eyeY - 0.015, 0.008, 0, TAU); ctx.fill();
+        // 面色渲染：关羽「面如重枣」，颊部透出赤铜色
+        if (look.blush) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.ellipse(hx - R * 0.18, hy + R * 0.30, R * 0.52, R * 0.34, -0.2, 0, TAU);
+            ctx.fillStyle = U.rgba(look.blush, 0.34); ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(hx + R * 0.46, hy + R * 0.28, R * 0.34, R * 0.26, 0.2, 0, TAU);
+            ctx.fillStyle = U.rgba(look.blush, 0.28); ctx.fill();
+            ctx.restore();
         }
+
+        // 面部朝向：+x 为正前方（眉眼略上移，为帽檐留出额头空间）
+        const eyeY = hy - 0.030;
+        const browC = look.browColor || '#2B1B12';
+        const browK = F.brow || 'bushy';
+        const eyeK = F.eye || 'normal';
+        // 近眼（靠后，因面向 +x 故 x 较小）/ 远眼（靠前）
+        const eyes = [[hx + 0.030, 1], [hx + 0.094, 0.86]];
+        const blink = (Math.sin(time * 1.3 + (o.phase || 0)) > 0.985) ? 0.16 : 1;
+        const OUT = Fig.OUTLINE;
+
+        // 侧脸阴影 / 额顶受光。
+        // 注意：这里刻意不使用 clip()——canvas 裁剪极其昂贵，而头部每帧、
+        // 每个角色都要绘制，用内收的椭圆叠加即可获得同样的立体感。
+        ctx.beginPath();
+        ctx.ellipse(hx - R * 0.38, hy + 0.01, R * 0.30, R * 0.66, 0, 0, TAU);
+        ctx.fillStyle = U.rgba('#000000', 0.08); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(hx + R * 0.16, hy - R * 0.46, R * 0.34, R * 0.18, -0.3, 0, TAU);
+        ctx.fillStyle = U.rgba('#FFFFFF', 0.09); ctx.fill();
+
+        // 头饰必须在眉眼之前绘制：帽壳只盖额头，眉眼露在帽檐之下
+        Fig._headgear(ctx, look, s, B, time, shape);
+
+        /* ---- 眉 ---- */
+        ctx.fillStyle = browC;
+        eyes.forEach(([ex, sc]) => {
+            ctx.save();
+            ctx.translate(ex, eyeY);
+            ctx.scale(sc, sc);
+            ctx.beginPath();
+            switch (browK) {
+                case 'silkworm': // 卧蚕眉：浓黑粗壮、中段隆起、尾上扬
+                    ctx.moveTo(-0.050, -0.040);
+                    ctx.quadraticCurveTo(-0.014, -0.084, 0.026, -0.076);
+                    ctx.quadraticCurveTo(0.052, -0.070, 0.062, -0.086);
+                    ctx.quadraticCurveTo(0.030, -0.062, -0.006, -0.056);
+                    ctx.quadraticCurveTo(-0.030, -0.052, -0.050, -0.040);
+                    break;
+                case 'bushy': // 浓眉：粗壮倒竖，凶悍
+                    ctx.moveTo(-0.048, -0.036);
+                    ctx.quadraticCurveTo(-0.010, -0.070, 0.034, -0.082);
+                    ctx.lineTo(0.058, -0.064);
+                    ctx.quadraticCurveTo(0.010, -0.050, -0.044, -0.026);
+                    break;
+                case 'sharp': // 剑眉：细长上挑，英气
+                    ctx.moveTo(-0.046, -0.042);
+                    ctx.quadraticCurveTo(-0.006, -0.064, 0.044, -0.082);
+                    ctx.lineTo(0.056, -0.070);
+                    ctx.quadraticCurveTo(0.006, -0.050, -0.044, -0.032);
+                    break;
+                case 'refined': // 清秀：细弯舒展
+                    ctx.moveTo(-0.044, -0.044);
+                    ctx.quadraticCurveTo(-0.006, -0.062, 0.038, -0.058);
+                    ctx.quadraticCurveTo(0.006, -0.050, -0.042, -0.034);
+                    break;
+                default: // gentle：平缓温和
+                    ctx.moveTo(-0.046, -0.046);
+                    ctx.quadraticCurveTo(-0.006, -0.062, 0.044, -0.048);
+                    ctx.quadraticCurveTo(0.006, -0.048, -0.044, -0.032);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        });
+
+        /* ---- 眼 ---- */
+        eyes.forEach(([ex, sc]) => {
+            ctx.save();
+            ctx.translate(ex, eyeY);
+            ctx.scale(sc, sc);
+            if (blink < 0.5) {
+                // 闭眼：一道弧线
+                ctx.strokeStyle = '#1A1015'; ctx.lineWidth = 0.016;
+                ctx.beginPath();
+                ctx.moveTo(-0.026, 0.006); ctx.quadraticCurveTo(0, 0.016, 0.026, 0.002);
+                ctx.stroke();
+                ctx.restore(); return;
+            }
+            if (eyeK === 'round') {
+                // 环眼：怒目圆睁（张飞豹头环眼）
+                ctx.beginPath();
+                ctx.ellipse(0.004, 0, 0.042, 0.046, 0, 0, TAU);
+                ctx.fillStyle = '#F6F1E6'; ctx.fill();
+                ctx.lineWidth = 0.020; ctx.strokeStyle = OUT; ctx.stroke();
+                ctx.beginPath(); ctx.arc(0.010, 0.002, 0.021, 0, TAU);
+                ctx.fillStyle = '#1A1015'; ctx.fill();
+                ctx.beginPath(); ctx.arc(0.016, -0.009, 0.008, 0, TAU);
+                ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            } else if (eyeK === 'phoenix') {
+                // 丹凤眼：细长、外眼角上挑，威而不怒（关羽）
+                ctx.beginPath();
+                ctx.moveTo(-0.036, 0.012);
+                ctx.quadraticCurveTo(-0.006, -0.038, 0.030, -0.030);
+                ctx.quadraticCurveTo(0.042, -0.026, 0.046, -0.034);
+                ctx.quadraticCurveTo(0.014, 0.008, -0.036, 0.017);
+                ctx.closePath();
+                ctx.fillStyle = '#F2EDE2'; ctx.fill();
+                ctx.lineWidth = 0.014; ctx.strokeStyle = OUT; ctx.stroke();
+                ctx.beginPath(); ctx.arc(0.002, -0.004, 0.016, 0, TAU);
+                ctx.fillStyle = '#1A1015'; ctx.fill();
+                ctx.beginPath(); ctx.arc(0.007, -0.010, 0.006, 0, TAU);
+                ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            } else if (eyeK === 'sharp') {
+                // 锐利有神（赵云）
+                ctx.beginPath();
+                ctx.moveTo(-0.030, 0.010);
+                ctx.quadraticCurveTo(-0.002, -0.026, 0.030, -0.012);
+                ctx.quadraticCurveTo(0.002, 0.020, -0.030, 0.014);
+                ctx.closePath();
+                ctx.fillStyle = '#F6F1E6'; ctx.fill();
+                ctx.lineWidth = 0.015; ctx.strokeStyle = OUT; ctx.stroke();
+                ctx.beginPath(); ctx.arc(0.004, -0.002, 0.017, 0, TAU);
+                ctx.fillStyle = '#1A1015'; ctx.fill();
+                ctx.beginPath(); ctx.arc(0.009, -0.008, 0.006, 0, TAU);
+                ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            } else {
+                // calm / normal：平和自然
+                ctx.beginPath();
+                ctx.ellipse(0.002, 0, 0.028, 0.034, 0, 0, TAU);
+                ctx.fillStyle = '#1A1015'; ctx.fill();
+                ctx.beginPath(); ctx.arc(0.008, -0.012, 0.009, 0, TAU);
+                ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            }
+            ctx.restore();
+        });
+
         // 鼻 / 嘴
         ctx.strokeStyle = skinD; ctx.lineWidth = 0.014;
-        ctx.beginPath(); ctx.moveTo(fx + 0.075, fy + 0.040); ctx.lineTo(fx + 0.062, fy + 0.068); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(hx + 0.062, hy + 0.040); ctx.lineTo(hx + 0.050, hy + 0.068); ctx.stroke();
         if (o.mouth !== 'none') {
             ctx.strokeStyle = '#7A3B32'; ctx.lineWidth = 0.016;
             ctx.beginPath();
-            if (o.mouth === 'open') { ctx.moveTo(fx + 0.030, fy + 0.098); ctx.lineTo(fx + 0.095, fy + 0.098); }
-            else { ctx.moveTo(fx + 0.035, fy + 0.092); ctx.quadraticCurveTo(fx + 0.070, fy + 0.106, fx + 0.100, fy + 0.090); }
+            if (o.mouth === 'open') { ctx.moveTo(hx + 0.018, hy + 0.098); ctx.lineTo(hx + 0.082, hy + 0.098); }
+            else { ctx.moveTo(hx + 0.024, hy + 0.092); ctx.quadraticCurveTo(hx + 0.058, hy + 0.106, hx + 0.088, hy + 0.090); }
             ctx.stroke();
         }
 
-        // 侧脸阴影
-        ctx.beginPath();
-        ctx.ellipse(s.head.x - R * 0.42, s.head.y + 0.01, R * 0.34, R * 0.80, 0, 0, TAU);
-        ctx.fillStyle = U.rgba('#000000', 0.07); ctx.fill();
-
-        Fig._headgear(ctx, look, s, B, time, shape);
         Fig._facialHair(ctx, look, s, B, shape);
     },
 
@@ -556,82 +738,82 @@ const Fig = {
         switch (look.head) {
             case 'crown': { // 刘备：束发金冠
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.03, R * 1.02, Math.PI * 1.02, Math.PI * 2.02);
-                ctx.lineTo(hx + R * 1.02, hy + 0.01);
-                ctx.lineTo(hx - R * 1.02, hy + 0.01);
+                ctx.arc(hx, hy - 0.140, R * 1.02, Math.PI * 1.02, Math.PI * 2.02);
+                ctx.lineTo(hx + R * 1.02, hy - 0.120);
+                ctx.lineTo(hx - R * 1.02, hy - 0.120);
                 ctx.closePath();
                 shape(hair);
                 ctx.beginPath();
-                ctx.moveTo(hx - R * 0.98, hy - 0.055);
-                ctx.quadraticCurveTo(hx, hy - 0.105, hx + R * 0.98, hy - 0.055);
-                ctx.lineTo(hx + R * 0.86, hy - 0.018);
-                ctx.quadraticCurveTo(hx, hy - 0.058, hx - R * 0.86, hy - 0.018);
+                ctx.moveTo(hx - R * 0.98, hy - 0.148);
+                ctx.quadraticCurveTo(hx, hy - 0.180, hx + R * 0.98, hy - 0.148);
+                ctx.lineTo(hx + R * 0.86, hy - 0.124);
+                ctx.quadraticCurveTo(hx, hy - 0.152, hx - R * 0.86, hy - 0.124);
                 ctx.closePath();
                 shape(band);
                 // 冠顶
                 ctx.beginPath();
-                ctx.moveTo(hx - 0.055, hy - 0.175);
-                ctx.lineTo(hx + 0.055, hy - 0.175);
-                ctx.lineTo(hx + 0.038, hy - 0.105);
-                ctx.lineTo(hx - 0.038, hy - 0.105);
+                ctx.moveTo(hx - 0.055, hy - 0.195);
+                ctx.lineTo(hx + 0.055, hy - 0.195);
+                ctx.lineTo(hx + 0.038, hy - 0.130);
+                ctx.lineTo(hx - 0.038, hy - 0.130);
                 ctx.closePath();
                 shape(band);
                 break;
             }
             case 'topknot': { // 关羽：束发 + 发髻
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.02, R * 1.0, Math.PI * 1.0, Math.PI * 2.0);
-                ctx.lineTo(hx + R, hy + 0.02);
-                ctx.lineTo(hx - R, hy + 0.02);
+                ctx.arc(hx, hy - 0.140, R * 1.0, Math.PI * 1.0, Math.PI * 2.0);
+                ctx.lineTo(hx + R, hy - 0.120);
+                ctx.lineTo(hx - R, hy - 0.120);
                 ctx.closePath();
                 shape(hair);
                 ctx.beginPath();
                 ctx.ellipse(hx - 0.045, hy - 0.20, 0.062, 0.048, -0.3, 0, TAU);
                 shape(hair);
                 ctx.beginPath();
-                ctx.moveTo(hx - R * 0.95, hy - 0.03);
-                ctx.quadraticCurveTo(hx, hy - 0.085, hx + R * 0.95, hy - 0.03);
-                ctx.lineTo(hx + R * 0.84, hy + 0.005);
-                ctx.quadraticCurveTo(hx, hy - 0.038, hx - R * 0.84, hy + 0.005);
+                ctx.moveTo(hx - R * 0.95, hy - 0.148);
+                ctx.quadraticCurveTo(hx, hy - 0.182, hx + R * 0.95, hy - 0.148);
+                ctx.lineTo(hx + R * 0.84, hy - 0.124);
+                ctx.quadraticCurveTo(hx, hy - 0.154, hx - R * 0.84, hy - 0.124);
                 ctx.closePath();
                 shape(look.bandColor || '#1B5E20');
                 break;
             }
             case 'wild': { // 张飞：怒发 + 头巾
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.02, R * 1.0, Math.PI * 0.98, Math.PI * 2.02);
+                ctx.arc(hx, hy - 0.128, R * 1.0, Math.PI * 0.98, Math.PI * 2.02);
                 ctx.closePath();
                 shape(hair);
                 for (let i = 0; i < 5; i++) {
                     const a = Math.PI * (1.15 + i * 0.18);
                     ctx.beginPath();
-                    ctx.moveTo(hx + Math.cos(a) * R * 0.9, hy + Math.sin(a) * R * 0.9);
-                    ctx.lineTo(hx + Math.cos(a - 0.06) * R * 1.42, hy + Math.sin(a - 0.06) * R * 1.42);
-                    ctx.lineTo(hx + Math.cos(a + 0.10) * R * 0.9, hy + Math.sin(a + 0.10) * R * 0.9);
+                    ctx.moveTo(hx + Math.cos(a) * R * 0.9, hy - 0.128 + Math.sin(a) * R * 0.9);
+                    ctx.lineTo(hx + Math.cos(a - 0.06) * R * 1.42, hy - 0.128 + Math.sin(a - 0.06) * R * 1.42);
+                    ctx.lineTo(hx + Math.cos(a + 0.10) * R * 0.9, hy - 0.128 + Math.sin(a + 0.10) * R * 0.9);
                     ctx.closePath();
                     shape(hair);
                 }
                 ctx.beginPath();
-                ctx.moveTo(hx - R * 0.98, hy - 0.045);
-                ctx.quadraticCurveTo(hx, hy - 0.095, hx + R * 0.98, hy - 0.045);
-                ctx.lineTo(hx + R * 0.86, hy - 0.005);
-                ctx.quadraticCurveTo(hx, hy - 0.048, hx - R * 0.86, hy - 0.005);
+                ctx.moveTo(hx - R * 0.98, hy - 0.142);
+                ctx.quadraticCurveTo(hx, hy - 0.172, hx + R * 0.98, hy - 0.142);
+                ctx.lineTo(hx + R * 0.86, hy - 0.118);
+                ctx.quadraticCurveTo(hx, hy - 0.146, hx - R * 0.86, hy - 0.118);
                 ctx.closePath();
                 shape(look.bandColor || '#37474F');
                 break;
             }
             case 'cap': { // 诸葛亮：纶巾高冠
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.02, R * 0.98, Math.PI * 1.0, Math.PI * 2.0);
-                ctx.lineTo(hx + R * 0.98, hy + 0.02);
-                ctx.lineTo(hx - R * 0.98, hy + 0.02);
+                ctx.arc(hx, hy - 0.140, R * 0.98, Math.PI * 1.0, Math.PI * 2.0);
+                ctx.lineTo(hx + R * 0.98, hy - 0.122);
+                ctx.lineTo(hx - R * 0.98, hy - 0.122);
                 ctx.closePath();
                 shape(hair);
                 ctx.beginPath();
-                ctx.moveTo(hx - 0.105, hy - 0.03);
-                ctx.lineTo(hx + 0.105, hy - 0.03);
-                ctx.lineTo(hx + 0.088, hy - 0.20);
-                ctx.quadraticCurveTo(hx, hy - 0.255, hx - 0.088, hy - 0.20);
+                ctx.moveTo(hx - 0.105, hy - 0.125);
+                ctx.lineTo(hx + 0.105, hy - 0.125);
+                ctx.lineTo(hx + 0.088, hy - 0.21);
+                ctx.quadraticCurveTo(hx, hy - 0.262, hx - 0.088, hy - 0.21);
                 ctx.closePath();
                 shape(look.bandColor || '#ECEFF1');
                 // 冠带飘尾
@@ -646,17 +828,17 @@ const Fig = {
             }
             case 'helm': { // 铁盔
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.015, R * 1.06, Math.PI * 1.0, Math.PI * 2.02);
-                ctx.lineTo(hx + R * 1.06, hy + 0.03);
-                ctx.lineTo(hx - R * 1.06, hy + 0.03);
+                ctx.arc(hx, hy - 0.132, R * 1.06, Math.PI * 1.0, Math.PI * 2.02);
+                ctx.lineTo(hx + R * 1.06, hy - 0.114);
+                ctx.lineTo(hx - R * 1.06, hy - 0.114);
                 ctx.closePath();
                 shape(look.armor || '#546E7A');
                 // 盔脊
                 ctx.beginPath();
                 ctx.moveTo(hx - 0.014, hy - 0.205);
-                ctx.quadraticCurveTo(hx + 0.03, hy - 0.10, hx + 0.10, hy - 0.02);
-                ctx.lineTo(hx + 0.03, hy - 0.02);
-                ctx.quadraticCurveTo(hx - 0.02, hy - 0.10, hx - 0.048, hy - 0.19);
+                ctx.quadraticCurveTo(hx + 0.03, hy - 0.14, hx + 0.10, hy - 0.112);
+                ctx.lineTo(hx + 0.03, hy - 0.112);
+                ctx.quadraticCurveTo(hx - 0.02, hy - 0.14, hx - 0.048, hy - 0.19);
                 ctx.closePath();
                 shape(look.trim || '#FFD700');
                 // 红缨
@@ -673,47 +855,47 @@ const Fig = {
             }
             case 'band': { // 黄巾
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.03, R * 1.0, Math.PI * 1.0, Math.PI * 2.02);
-                ctx.lineTo(hx + R, hy + 0.015);
-                ctx.lineTo(hx - R, hy + 0.015);
+                ctx.arc(hx, hy - 0.138, R * 1.0, Math.PI * 1.0, Math.PI * 2.02);
+                ctx.lineTo(hx + R, hy - 0.118);
+                ctx.lineTo(hx - R, hy - 0.118);
                 ctx.closePath();
                 shape(hair);
                 ctx.beginPath();
-                ctx.moveTo(hx - R * 1.02, hy - 0.075);
-                ctx.quadraticCurveTo(hx, hy - 0.115, hx + R * 1.02, hy - 0.075);
-                ctx.lineTo(hx + R * 1.02, hy - 0.012);
-                ctx.quadraticCurveTo(hx, hy - 0.048, hx - R * 1.02, hy - 0.012);
+                ctx.moveTo(hx - R * 1.02, hy - 0.146);
+                ctx.quadraticCurveTo(hx, hy - 0.176, hx + R * 1.02, hy - 0.146);
+                ctx.lineTo(hx + R * 1.02, hy - 0.122);
+                ctx.quadraticCurveTo(hx, hy - 0.150, hx - R * 1.02, hy - 0.122);
                 ctx.closePath();
                 shape(band);
                 // 巾尾
                 const sw2 = Math.sin(time * 4.0) * 0.04;
                 ctx.beginPath();
-                ctx.moveTo(hx - R * 0.9, hy - 0.055);
-                ctx.quadraticCurveTo(hx - 0.30 + sw2, hy - 0.02, hx - 0.34 + sw2 * 1.6, hy + 0.10);
-                ctx.quadraticCurveTo(hx - 0.20, hy + 0.01, hx - R * 0.8, hy - 0.015);
+                ctx.moveTo(hx - R * 0.9, hy - 0.13);
+                ctx.quadraticCurveTo(hx - 0.30 + sw2, hy - 0.06, hx - 0.34 + sw2 * 1.6, hy + 0.06);
+                ctx.quadraticCurveTo(hx - 0.20, hy - 0.04, hx - R * 0.8, hy - 0.10);
                 ctx.closePath();
                 ctx.fillStyle = band; ctx.fill();
                 break;
             }
             case 'mask': { // 天魔面具
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.02, R * 1.02, Math.PI * 0.98, Math.PI * 2.02);
-                ctx.lineTo(hx + R * 1.02, hy + 0.05);
-                ctx.lineTo(hx - R * 1.02, hy + 0.05);
+                ctx.arc(hx, hy - 0.095, R * 1.02, Math.PI * 0.98, Math.PI * 2.02);
+                ctx.lineTo(hx + R * 1.02, hy - 0.072);
+                ctx.lineTo(hx - R * 1.02, hy - 0.072);
                 ctx.closePath();
                 shape(look.maskColor || '#E0E0E0');
                 ctx.fillStyle = look.maskMark || '#C62828';
                 ctx.beginPath();
                 ctx.moveTo(hx - 0.02, hy - 0.13); ctx.lineTo(hx + 0.02, hy - 0.13);
-                ctx.lineTo(hx + 0.02, hy + 0.03); ctx.lineTo(hx - 0.02, hy + 0.03);
+                ctx.lineTo(hx + 0.02, hy - 0.078); ctx.lineTo(hx - 0.02, hy - 0.078);
                 ctx.closePath(); ctx.fill();
                 break;
             }
             default: { // 普通发髻
                 ctx.beginPath();
-                ctx.arc(hx, hy - 0.025, R * 1.0, Math.PI * 1.0, Math.PI * 2.02);
-                ctx.lineTo(hx + R, hy + 0.015);
-                ctx.lineTo(hx - R, hy + 0.015);
+                ctx.arc(hx, hy - 0.140, R * 1.0, Math.PI * 1.0, Math.PI * 2.02);
+                ctx.lineTo(hx + R, hy - 0.120);
+                ctx.lineTo(hx - R, hy - 0.120);
                 ctx.closePath();
                 shape(hair);
             }
@@ -770,7 +952,8 @@ const Fig = {
             ctx.lineWidth = lw || OLW; ctx.strokeStyle = OUT; ctx.stroke();
         };
 
-        const blade = (len, w0, w1, color, hi) => {
+        /* blade：剑身。spine=true 时绘制双棱中脊（双股剑的辨识特征） */
+        const blade = (len, w0, w1, color, hi, spine) => {
             ctx.beginPath();
             ctx.moveTo(0, -w0 / 2);
             ctx.lineTo(len * 0.72, -w1 / 2);
@@ -779,6 +962,7 @@ const Fig = {
             ctx.lineTo(0, w0 / 2);
             ctx.closePath();
             shape(color);
+            // 上手高光面
             ctx.beginPath();
             ctx.moveTo(0.02, -w0 / 2 + 0.012);
             ctx.lineTo(len * 0.70, -w1 / 2 + 0.008);
@@ -786,6 +970,20 @@ const Fig = {
             ctx.lineTo(0.02, 0);
             ctx.closePath();
             ctx.fillStyle = hi || steelL; ctx.fill();
+            // 剑脊：双棱隆起 + 中缝暗线，令刃面有立体感
+            if (spine) {
+                ctx.beginPath();
+                ctx.moveTo(0.05, -0.010);
+                ctx.lineTo(len * 0.88, -0.005);
+                ctx.lineTo(len * 0.88, 0.005);
+                ctx.lineTo(0.05, 0.010);
+                ctx.closePath();
+                ctx.fillStyle = U.shade(color, 0.40); ctx.fill();
+            }
+            ctx.beginPath();
+            ctx.moveTo(0.06, 0); ctx.lineTo(len * 0.84, 0);
+            ctx.lineWidth = 0.008; ctx.strokeStyle = U.rgba('#000000', 0.20);
+            ctx.stroke();
         };
         const guard = (y, w) => {
             ctx.beginPath();
@@ -794,21 +992,61 @@ const Fig = {
         };
 
         switch (w) {
-            case 'jian': // 单/双股剑
+            case 'jian': { // 雌雄双股剑：双棱剑脊，剑首系穗
                 ctx.beginPath(); ctx.moveTo(-0.02, -0.022); ctx.lineTo(0.16, -0.022); ctx.lineTo(0.16, 0.022); ctx.lineTo(-0.02, 0.022); ctx.closePath();
                 shape(gripC);
+                // 柄缠丝
+                ctx.strokeStyle = U.rgba('#000000', 0.22); ctx.lineWidth = 0.008;
+                for (let i = 0; i < 4; i++) {
+                    const gx = 0.01 + i * 0.038;
+                    ctx.beginPath(); ctx.moveTo(gx, -0.022); ctx.lineTo(gx + 0.014, 0.022); ctx.stroke();
+                }
                 guard(0, 0.13);
-                blade(0.98, 0.062, 0.030, steel, steelL);
+                blade(0.98, 0.062, 0.030, steel, steelL, true);
+                // 剑首环
+                ctx.beginPath(); ctx.arc(-0.045, 0, 0.038, 0, TAU);
+                ctx.lineWidth = 0.016; ctx.strokeStyle = look.trim || '#C9A227'; ctx.stroke();
+                // 剑穗
+                const jw = Math.sin((o.time || 0) * 4.4) * 0.016;
+                ctx.beginPath();
+                ctx.moveTo(-0.06, 0.01);
+                ctx.quadraticCurveTo(-0.11 + jw, 0.04, -0.15 + jw * 2, 0.085);
+                ctx.lineWidth = 0.013; ctx.strokeStyle = look.ribbon || '#C62828'; ctx.stroke();
                 break;
-            case 'jianShort':
+            }
+            case 'jianShort': {
                 ctx.beginPath(); ctx.moveTo(-0.02, -0.020); ctx.lineTo(0.13, -0.020); ctx.lineTo(0.13, 0.020); ctx.lineTo(-0.02, 0.020); ctx.closePath();
                 shape(gripC);
+                ctx.strokeStyle = U.rgba('#000000', 0.22); ctx.lineWidth = 0.008;
+                for (let i = 0; i < 3; i++) {
+                    const gx = 0.01 + i * 0.038;
+                    ctx.beginPath(); ctx.moveTo(gx, -0.020); ctx.lineTo(gx + 0.014, 0.020); ctx.stroke();
+                }
                 guard(0, 0.11);
-                blade(0.68, 0.055, 0.026, steel, steelL);
+                blade(0.68, 0.055, 0.026, steel, steelL, true);
+                ctx.beginPath(); ctx.arc(-0.038, 0, 0.032, 0, TAU);
+                ctx.lineWidth = 0.014; ctx.strokeStyle = look.trim || '#C9A227'; ctx.stroke();
+                const jw2 = Math.sin((o.time || 0) * 4.4 + 1.2) * 0.014;
+                ctx.beginPath();
+                ctx.moveTo(-0.05, 0.008);
+                ctx.quadraticCurveTo(-0.09 + jw2, 0.034, -0.12 + jw2 * 2, 0.072);
+                ctx.lineWidth = 0.011; ctx.strokeStyle = look.ribbon || '#C62828'; ctx.stroke();
                 break;
-            case 'guandao': { // 青龙偃月刀
+            }
+            case 'guandao': { // 青龙偃月刀（冷艳锯）：新月刃 + 龙吞口 + 刀背倒刺
+                const gold = look.trim || '#C9A227';
+                // 长杆
                 ctx.beginPath(); ctx.moveTo(-0.42, -0.026); ctx.lineTo(1.02, -0.026); ctx.lineTo(1.02, 0.026); ctx.lineTo(-0.42, 0.026); ctx.closePath();
                 shape(wood);
+                // 杆身缠铜箍
+                [0.30, 0.58, 0.86].forEach((bx) => {
+                    ctx.beginPath(); U.roundRect(ctx, bx - 0.022, -0.030, 0.044, 0.060, 0.012);
+                    shape(gold, 0.014);
+                });
+                // 刀背倒刺（小枝，偃月刀形制标志）
+                ctx.beginPath();
+                ctx.moveTo(0.94, -0.058); ctx.lineTo(1.00, -0.108); ctx.lineTo(1.06, -0.052);
+                ctx.closePath(); shape(steel, 0.016);
                 // 刀身（新月）
                 ctx.beginPath();
                 ctx.moveTo(0.86, -0.03);
@@ -816,16 +1054,39 @@ const Fig = {
                 ctx.quadraticCurveTo(1.22, 0.10, 0.86, 0.05);
                 ctx.closePath();
                 shape(steel);
+                // 刃面高光
                 ctx.beginPath();
                 ctx.moveTo(0.90, -0.05);
                 ctx.quadraticCurveTo(1.16, -0.24, 1.20, -0.03);
                 ctx.lineTo(0.92, -0.01);
                 ctx.closePath();
                 ctx.fillStyle = steelL; ctx.fill();
-                // 龙口
+                // 刃口银线
                 ctx.beginPath();
-                ctx.moveTo(0.84, -0.055); ctx.lineTo(0.98, -0.055); ctx.lineTo(0.98, 0.055); ctx.lineTo(0.84, 0.055);
-                ctx.closePath(); shape(look.trim || '#C9A227');
+                ctx.moveTo(0.88, 0.042);
+                ctx.quadraticCurveTo(1.18, 0.09, 1.28, 0.022);
+                ctx.lineWidth = 0.012; ctx.strokeStyle = U.rgba('#FFFFFF', 0.72); ctx.stroke();
+                // 龙吞口：龙头衔刃
+                ctx.beginPath();
+                ctx.moveTo(0.80, -0.062);
+                ctx.quadraticCurveTo(0.94, -0.072, 0.98, -0.040);
+                ctx.lineTo(0.98, 0.050);
+                ctx.quadraticCurveTo(0.94, 0.070, 0.80, 0.058);
+                ctx.closePath(); shape(gold, 0.018);
+                // 龙角
+                ctx.beginPath();
+                ctx.moveTo(0.84, -0.060); ctx.lineTo(0.88, -0.098); ctx.lineTo(0.92, -0.058);
+                ctx.closePath(); ctx.fillStyle = gold; ctx.fill();
+                // 龙眼
+                ctx.beginPath(); ctx.arc(0.885, -0.018, 0.013, 0, TAU);
+                ctx.fillStyle = '#B71C1C'; ctx.fill();
+                ctx.beginPath(); ctx.arc(0.889, -0.022, 0.005, 0, TAU);
+                ctx.fillStyle = '#FFFFFF'; ctx.fill();
+                // 龙须
+                ctx.beginPath();
+                ctx.moveTo(0.80, 0.040);
+                ctx.quadraticCurveTo(0.72, 0.060, 0.66, 0.038);
+                ctx.lineWidth = 0.011; ctx.strokeStyle = gold; ctx.stroke();
                 // 尾鐏
                 ctx.beginPath(); ctx.moveTo(-0.42, -0.036); ctx.lineTo(-0.52, -0.028); ctx.lineTo(-0.52, 0.028); ctx.lineTo(-0.42, 0.036); ctx.closePath();
                 shape(steelD);
@@ -879,26 +1140,57 @@ const Fig = {
                 ctx.fillStyle = look.tassel || '#D32F2F'; ctx.fill();
                 break;
             }
-            case 'fan': { // 羽扇
-                ctx.beginPath(); ctx.moveTo(-0.02, -0.020); ctx.lineTo(0.16, -0.020); ctx.lineTo(0.16, 0.020); ctx.lineTo(-0.02, 0.020); ctx.closePath();
+            case 'fan': { // 白鹤羽扇：柄 + 羽轴 + 羽枝分叉
+                // 扇柄（竹节柄）
+                ctx.beginPath(); ctx.moveTo(-0.06, -0.019); ctx.lineTo(0.17, -0.019); ctx.lineTo(0.17, 0.019); ctx.lineTo(-0.06, 0.019); ctx.closePath();
                 shape('#6D4C33');
+                ctx.strokeStyle = U.rgba('#3E2723', 0.55); ctx.lineWidth = 0.007;
+                [-0.03, 0.03, 0.09].forEach((bx) => {
+                    ctx.beginPath(); ctx.moveTo(bx, -0.019); ctx.lineTo(bx, 0.019); ctx.stroke();
+                });
+                // 鹤羽：由内向外层叠，每片带羽轴与羽枝
+                const quill = '#FAFAFA', quillD = '#D8DCE0';
                 for (let i = -4; i <= 4; i++) {
-                    const a = i * 0.20;
+                    const a = i * 0.208;
                     ctx.save(); ctx.rotate(a);
+                    const shade = Math.abs(i) % 2 === 0 ? quill : quillD;
                     ctx.beginPath();
-                    ctx.moveTo(0.16, -0.016);
-                    ctx.quadraticCurveTo(0.34, -0.030, 0.46, 0);
-                    ctx.quadraticCurveTo(0.34, 0.030, 0.16, 0.016);
+                    ctx.moveTo(0.17, -0.015);
+                    ctx.quadraticCurveTo(0.34, -0.030, 0.48, -0.004);
+                    ctx.quadraticCurveTo(0.34, 0.030, 0.17, 0.015);
                     ctx.closePath();
-                    shape(i % 2 === 0 ? '#F5F5F5' : '#E0E0E0', 0.012);
+                    shape(shade, 0.011);
+                    // 羽轴
+                    ctx.beginPath();
+                    ctx.moveTo(0.18, 0); ctx.lineTo(0.47, -0.004);
+                    ctx.lineWidth = 0.007; ctx.strokeStyle = U.rgba('#9E9E9E', 0.75); ctx.stroke();
+                    // 羽枝（细密分叉）
+                    ctx.lineWidth = 0.004; ctx.strokeStyle = U.rgba('#B0BEC5', 0.55);
+                    for (let k = 1; k <= 5; k++) {
+                        const px = 0.20 + k * 0.052;
+                        const sp = 0.020 * (1 - k * 0.09);
+                        ctx.beginPath(); ctx.moveTo(px, -0.002); ctx.lineTo(px + 0.026, -sp); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(px, -0.002); ctx.lineTo(px + 0.026, sp); ctx.stroke();
+                    }
                     ctx.restore();
                 }
-                ctx.beginPath(); ctx.arc(0.16, 0, 0.042, 0, TAU); shape(look.trim || '#C9A227');
+                // 扇托玉环
+                ctx.beginPath(); ctx.arc(0.17, 0, 0.040, 0, TAU); shape(look.trim || '#C9A227', 0.016);
+                ctx.beginPath(); ctx.arc(0.17, 0, 0.018, 0, TAU);
+                ctx.fillStyle = U.rgba('#FFFFFF', 0.45); ctx.fill();
                 break;
             }
-            case 'staff': { // 法杖
+            case 'staff': { // 九节杖：太平道教主法器，杖身九节铜箍，顶端悬符
                 ctx.beginPath(); ctx.moveTo(-0.40, -0.024); ctx.lineTo(0.98, -0.024); ctx.lineTo(0.98, 0.024); ctx.lineTo(-0.40, 0.024); ctx.closePath();
                 shape('#4E342E');
+                // 九节：沿杖身均布的铜箍鼓环
+                ctx.fillStyle = '#B8860B';
+                for (let i = 0; i < 9; i++) {
+                    const nx = -0.34 + i * 0.155;
+                    ctx.beginPath();
+                    ctx.ellipse(nx, 0, 0.020, 0.040, 0, 0, TAU);
+                    ctx.fill();
+                }
                 // 顶端符咒环
                 ctx.save(); ctx.translate(1.06, 0); ctx.rotate((o.time || 0) * 1.6);
                 ctx.beginPath(); ctx.arc(0, 0, 0.13, 0, TAU);
@@ -908,6 +1200,17 @@ const Fig = {
                 ctx.restore();
                 ctx.beginPath(); ctx.arc(1.06, 0, 0.052, 0, TAU);
                 ctx.fillStyle = look.magic || '#7E57C2'; ctx.fill();
+                // 悬垂的黄色符纸（太平道符咒，随动作轻摆）
+                const tw = Math.sin((o.time || 0) * 3.1) * 0.02;
+                ctx.beginPath();
+                ctx.moveTo(0.94, -0.05); ctx.lineTo(0.98, -0.05);
+                ctx.quadraticCurveTo(1.00 + tw, 0.05, 0.99 + tw, 0.16);
+                ctx.lineTo(0.93 + tw, 0.16);
+                ctx.quadraticCurveTo(0.92, 0.05, 0.94, -0.05);
+                ctx.closePath();
+                ctx.fillStyle = '#FDD835'; ctx.fill();
+                ctx.beginPath(); ctx.moveTo(0.945 + tw * 0.6, 0.02); ctx.lineTo(0.965 + tw * 0.6, 0.02);
+                ctx.lineWidth = 0.012; ctx.strokeStyle = '#C62828'; ctx.stroke();
                 break;
             }
             case 'dao': { // 朴刀

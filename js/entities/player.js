@@ -212,8 +212,11 @@ class Player extends Actor {
         /* ---- 必杀技 ---- */
         if (this.state === 'skill') { this.tickSkill(dt); return; }
 
-        if (inp.consume('skill')) {
-            if (this.canSkill()) { this.startSkill(); return; }
+        // 缓冲内持续尝试：硬直/落地途中按下的 L 会在恢复瞬间自动接上，而非被吞掉
+        if (inp.buffered('skill') && this.canSkill()) {
+            inp.consume('skill');
+            this.startSkill();
+            return;
         }
 
         /* ---- 倒地 / 起身 ---- */

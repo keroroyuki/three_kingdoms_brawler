@@ -16,12 +16,20 @@ const LOOKS = {
         weapon: 'jian', offhand: 'jianShort',
         steel: '#DDE3E8', grip: '#6D4C33',
         cape: '#1B5E20',
+        // 演义：「两耳垂肩，双手过膝，目能自顾其耳，面如冠玉，唇若涂脂」
+        // 耳垂长及肩是刘备最鲜明的体貌，故 ears 用 'long'
+        face: { shape: 'oval', brow: 'gentle', eye: 'gentle', ears: 'long', jaw: 0.30 },
         desc: '双股剑 · 均衡型',
         stats: { hp: 120, atk: 15, spd: 185, reach: 1.05 }
     },
     guanyu: {
         name: '关羽', title: '义薄云天',
-        build: 1.12, skin: '#E8A87C', skinDark: '#C4885C',
+        build: 1.12,
+        // 面如重枣：演义载其「面如重枣，唇若涂脂，丹凤眼，卧蚕眉」
+        skin: '#C4674A', skinDark: '#9C4A32', skinLight: '#DC8A66',
+        blush: '#A84E36',
+        // 丹凤眼 + 卧蚕眉 + 长脸，是关公相貌的三要素
+        face: { shape: 'long', brow: 'silkworm', eye: 'phoenix', ears: 'normal', jaw: 0.36 },
         robe: '#1B5E20', robeDark: '#0E3D14', robeLight: '#2E7D32',
         skirt: '#164A1C', sash: '#8D6E63', trim: '#FFD700',
         armor: '#B8860B', armorLight: '#DAA520',
@@ -44,6 +52,8 @@ const LOOKS = {
         beard: 'stubble', beardColor: '#14100E',
         robeStyle: 'short',
         weapon: 'spear', steel: '#D6DBE0', tassel: '#C62828',
+        // 演义形象：豹头环眼、燕颔虎须，声若巨雷、势如奔马
+        face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.46 },
         desc: '丈八蛇矛 · 爆发型',
         stats: { hp: 160, atk: 24, spd: 138, reach: 1.55 }
     },
@@ -57,6 +67,8 @@ const LOOKS = {
         head: 'helm', hair: '#1A1410', plume: '#D32F2F',
         robeStyle: 'short', ribbon: '#1976D2',
         weapon: 'lance', steel: '#E8EDF2', tassel: '#D32F2F', wood: '#4E342E',
+        // 演义形象：白袍银铠的少年将军，浓眉大眼、英气逼人
+        face: { shape: 'oval', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.28 },
         desc: '龙胆亮银枪 · 速度型',
         stats: { hp: 105, atk: 17, spd: 225, reach: 1.40 }
     },
@@ -70,6 +82,8 @@ const LOOKS = {
         beard: 'goatee', beardColor: '#2B1B12',
         robeStyle: 'long', ribbon: '#B0BEC5',
         weapon: 'fan',
+        // 演义：「面如冠玉，头戴纶巾，身披鹤氅，飘飘然有神仙之概」——眉清目秀、从容淡定
+        face: { shape: 'oval', brow: 'refined', eye: 'calm', ears: 'normal', jaw: 0.26 },
         desc: '羽扇 · 远程型',
         stats: { hp: 90, atk: 13, spd: 175, reach: 1.20 }
     },
@@ -83,6 +97,8 @@ const LOOKS = {
         pants: '#5D4037', boot: '#3E2723',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        // 乌合之众：粗鄙方脸、浓眉浊眼
+        face: { shape: 'square', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.44 },
         weapon: 'dao', steel: '#C7CCD1',
         stats: { hp: 40, atk: 9, spd: 62, reach: 1.0 }
     },
@@ -94,6 +110,8 @@ const LOOKS = {
         pants: '#5D4037', boot: '#3E2723',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        // 弓手：机敏瘦削，眉眼细长
+        face: { shape: 'oval', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.30 },
         weapon: 'bow', wood: '#6D4C33',
         stats: { hp: 32, atk: 11, spd: 70, reach: 0 }
     },
@@ -106,6 +124,8 @@ const LOOKS = {
         pants: '#4E342E', boot: '#3E2723',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        // 刀盾：厚重方面，沉稳木讷
+        face: { shape: 'square', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.50 },
         weapon: 'dao', steel: '#C7CCD1',
         shieldColor: '#A1887F', shieldBoss: '#C9A227',
         stats: { hp: 66, atk: 12, spd: 55, reach: 0.95 }
@@ -119,6 +139,7 @@ const LOOKS = {
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
         weapon: 'lance', steel: '#C7CCD1', tassel: '#FDD835', wood: '#5D4037',
+        face: { shape: 'long', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.32 },
         stats: { hp: 52, atk: 14, spd: 66, reach: 1.55 }
     },
     firemage: {
@@ -129,6 +150,8 @@ const LOOKS = {
         pants: '#4527A0', boot: '#311B92',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'long',
+        // 术士：阴鸷长脸，细眉低目
+        face: { shape: 'long', brow: 'refined', eye: 'calm', ears: 'normal', jaw: 0.28 },
         weapon: 'staff', magic: '#FF7043',
         stats: { hp: 38, atk: 13, spd: 58, reach: 0 }
     },
@@ -141,6 +164,8 @@ const LOOKS = {
         pants: '#37474F', boot: '#263238',
         head: 'helm', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        // 铁骑：剽悍方脸，剑眉锐目
+        face: { shape: 'square', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.42 },
         weapon: 'lance', steel: '#C7CCD1', tassel: '#FDD835', wood: '#5D4037',
         mount: { body: '#5D4037', mane: '#2B1B12', hoof: '#263238', saddle: '#8B0000' },
         stats: { hp: 58, atk: 17, spd: 92, reach: 1.5 }
@@ -154,6 +179,8 @@ const LOOKS = {
         pants: '#263238', boot: '#1B2429',
         head: 'helm', hair: '#2B1B12', bandColor: '#FDD835', plume: '#FDD835',
         robeStyle: 'short',
+        // 精锐：久经战阵，长脸浓眉、目光如炬
+        face: { shape: 'long', brow: 'bushy', eye: 'sharp', ears: 'normal', jaw: 0.36 },
         weapon: 'dao', steel: '#D6DBE0',
         stats: { hp: 78, atk: 16, spd: 78, reach: 1.1 }
     },
@@ -167,6 +194,7 @@ const LOOKS = {
         head: 'helm', hair: '#2B1B12', plume: '#B71C1C',
         robeStyle: 'short',
         weapon: 'axe', steel: '#D6DBE0',
+        face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.48 },
         superArmor: true,
         stats: { hp: 105, atk: 20, spd: 62, reach: 1.25 }
     },
@@ -180,6 +208,8 @@ const LOOKS = {
         pants: '#8D6E63', boot: '#4E342E',
         head: 'band', hair: '#2B1B12', bandColor: '#FFD700',
         robeStyle: 'long', cape: '#E65100', ribbon: '#FFD700',
+        // 天公将军：教主威仪，长脸卧蚕眉、丹凤眼，与其弟张宝的武夫相区分
+        face: { shape: 'long', brow: 'silkworm', eye: 'phoenix', ears: 'normal', jaw: 0.32 },
         weapon: 'staff', magic: '#7E57C2',
         boss: true,
         stats: { hp: 420, atk: 20, spd: 78, reach: 1.3 }
@@ -194,6 +224,8 @@ const LOOKS = {
         head: 'helm', hair: '#2B1B12', plume: '#D32F2F',
         robeStyle: 'long', cape: '#4A148C',
         weapon: 'guandao', steel: '#D6DBE0', wood: '#3E2723',
+        // 地公将军：张角之弟，凶悍武夫，浓眉环眼
+        face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.44 },
         boss: true,
         stats: { hp: 560, atk: 24, spd: 86, reach: 1.5 }
     },
@@ -206,6 +238,8 @@ const LOOKS = {
         pants: '#1A237E', boot: '#0D1B3E',
         head: 'mask', hair: '#1A237E', maskColor: '#E8EAF6', maskMark: '#D50000',
         robeStyle: 'long', cape: '#1A237E', ribbon: '#D50000',
+        // 天魔：非人之相，方阔獠面、怒目圆睁
+        face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.52 },
         weapon: 'staff', magic: '#18FFFF',
         boss: true,
         stats: { hp: 760, atk: 28, spd: 96, reach: 1.5 }
