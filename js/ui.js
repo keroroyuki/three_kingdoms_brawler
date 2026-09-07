@@ -81,6 +81,7 @@ class UI {
         U.roundRect(ctx, px, py, pw, ph, 8);
         ctx.fillStyle = C.panel; ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = U.rgba(C.gold, 0.65); ctx.stroke();
+        this.hook(ctx, px + 3, py + 3, pw - 6, ph - 6, 13, U.rgba(C.gold, 0.85), 2);
 
         // 头像
         ctx.save();
@@ -142,6 +143,7 @@ class UI {
         U.roundRect(ctx, VIEW.W - 174, 12, 160, 40, 8);
         ctx.fillStyle = C.panel; ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = U.rgba(C.gold, 0.55); ctx.stroke();
+        this.hook(ctx, VIEW.W - 171, 15, 154, 34, 10, U.rgba(C.gold, 0.75), 1.8);
         txt(ctx, '战功', VIEW.W - 160, 30, 12, C.dim, 'left', { weight: 500 });
         txt(ctx, String(Math.round(p.score)).padStart(6, '0'), VIEW.W - 22, 45, 21, C.gold, 'right');
         ctx.restore();
@@ -149,16 +151,44 @@ class UI {
         /* ---- 顶部中央：关卡进度 ---- */
         ctx.save();
         const lw = 250;
-        U.roundRect(ctx, VIEW.W / 2 - lw / 2, 12, lw, 30, 8);
+        U.roundRect(ctx, VIEW.W / 2 - lw / 2, 12, lw, 40, 8);
         ctx.fillStyle = C.panel; ctx.fill();
         ctx.lineWidth = 1.6; ctx.strokeStyle = U.rgba(C.gold, 0.45); ctx.stroke();
-        txt(ctx, g.levelName(), VIEW.W / 2, 32, 13.5, C.white, 'center');
-        // 进度条
+        this.hook(ctx, VIEW.W / 2 - lw / 2 + 3, 15, lw - 6, 34, 11, U.rgba(C.gold, 0.6), 1.6);
+        txt(ctx, g.levelName(), VIEW.W / 2, 29, 13.5, C.white, 'center');
+
+        // 行军路线：已行路段 + 里程刻度 + 终点敌楼 + 帅旗标记
         const prog = U.clamp((p.x - 0) / (g.level.length), 0, 1);
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        U.roundRect(ctx, VIEW.W / 2 - lw / 2 + 12, 38, lw - 24, 4, 2); ctx.fill();
-        ctx.fillStyle = C.gold;
-        U.roundRect(ctx, VIEW.W / 2 - lw / 2 + 12, 38, (lw - 24) * prog, 4, 2); ctx.fill();
+        const rx = VIEW.W / 2 - lw / 2 + 16, rw = lw - 32, ry = 46;
+        ctx.lineCap = 'butt';
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx + rw, ry); ctx.stroke();
+        if (prog > 0) {
+            ctx.strokeStyle = C.gold; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx + rw * prog, ry); ctx.stroke();
+        }
+        ctx.strokeStyle = U.rgba(C.gold, 0.35); ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        for (let i = 1; i < 5; i++) {
+            const mx = rx + rw * i / 5;
+            ctx.moveTo(mx, ry - 3); ctx.lineTo(mx, ry + 3);
+        }
+        ctx.stroke();
+        // 终点敌楼
+        ctx.strokeStyle = U.rgba(C.gold, 0.8); ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(rx + rw + 2, ry); ctx.lineTo(rx + rw + 2, ry - 7);
+        ctx.lineTo(rx + rw + 8, ry - 7); ctx.lineTo(rx + rw + 8, ry);
+        ctx.stroke();
+        // 帅旗
+        const fxp = rx + rw * prog;
+        ctx.strokeStyle = '#E8DCC0'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(fxp, ry - 1); ctx.lineTo(fxp, ry - 12); ctx.stroke();
+        ctx.fillStyle = '#C62828';
+        ctx.beginPath();
+        ctx.moveTo(fxp + 1, ry - 12); ctx.lineTo(fxp + 9, ry - 9.5); ctx.lineTo(fxp + 1, ry - 7);
+        ctx.closePath(); ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = U.rgba(C.gold, 0.9); ctx.stroke();
         ctx.restore();
 
         /* ---- 连击 ---- */
@@ -201,6 +231,22 @@ class UI {
         if (this.banner) this.drawBigBanner(ctx);
     }
 
+    /** 汉式角云纹：四条向内的折角包边，让面板一眼有汉画砖的方折感 */
+    hook(ctx, x, y, w, h, len, col, lw) {
+        ctx.save();
+        ctx.strokeStyle = col; ctx.lineWidth = lw || 1.6;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        const corners = [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]];
+        for (const [cx, cy, sx, sy] of corners) {
+            ctx.beginPath();
+            ctx.moveTo(cx + sx * len, cy + sy * len * 0.42);
+            ctx.lineTo(cx + sx * len, cy);
+            ctx.lineTo(cx + sx * len * 0.42, cy);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     bar(ctx, x, y, w, h, v, fg, bg, border) {
         ctx.save();
         ctx.fillStyle = bg;
@@ -226,6 +272,7 @@ class UI {
         U.roundRect(ctx, x - 6, y - 22, w + 12, 50, 8);
         ctx.fillStyle = 'rgba(18,12,10,0.82)'; ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = U.rgba(C.gold, 0.7); ctx.stroke();
+        this.hook(ctx, x - 3, y - 19, w + 6, 44, 14, U.rgba(C.gold, 0.8), 2);
 
         txt(ctx, b.look.name, x + 4, y - 6, 15, C.gold, 'left');
         txt(ctx, b.look.title, x + w - 4, y - 6, 11.5, C.dim, 'right', { weight: 500 });

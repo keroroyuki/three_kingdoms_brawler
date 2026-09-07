@@ -16,13 +16,14 @@ const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/
     await page.waitForFunction('window.GAME && window.GAME.frames > 5', {}, { timeout: 5000 });
 
     const r = await page.evaluate(() => {
-        function stat(cv) {
+        function stat(cv, thr) {
             const c = cv.getContext('2d');
+            const t = thr == null ? 8 : thr;
             const d = c.getImageData(0, 0, cv.width, cv.height).data;
             let n = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
             for (let y = 0; y < cv.height; y++) {
                 for (let x = 0; x < cv.width; x++) {
-                    if (d[(y * cv.width + x) * 4 + 3] > 8) {
+                    if (d[(y * cv.width + x) * 4 + 3] > t) {
                         n++;
                         if (x < x0) x0 = x; if (x > x1) x1 = x;
                         if (y < y0) y0 = y; if (y > y1) y1 = y;
@@ -33,7 +34,38 @@ const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/
             return { n, w: x1 - x0 + 1, h: y1 - y0 + 1, x0, x1, y0, y1 };
         }
 
-        const out = { figures: [], weapons: [], errors: [] };
+        const out = { figures: [], weapons: [], items: [], breakables: [], errors: [] };
+
+        // —— 掉落道具 / 可破坏物：对齐到画布中心的临时变换 ——
+        const cvI = document.createElement('canvas');
+        cvI.width = 140; cvI.height = 110;
+        const ci = cvI.getContext('2d');
+        const refX = VIEW.W / 2, refY = screenY(1.5);
+        const paintEntity = (make, label, bucket) => {
+            ci.setTransform(1, 0, 0, 1, 0, 0);
+            ci.clearRect(0, 0, 140, 110);
+            try {
+                ci.translate(70 - refX, 58 - refY);
+                make();
+            } catch (e) { out.errors.push(`${label}: ${e.message}`); return; }
+            ci.setTransform(1, 0, 0, 1, 0, 0);
+            // 阈值 200：道具外有一层径向发光，会把包围盒统一撑成光晕大小，
+            // 只统计不透明像素才能量到图标本体
+            out[bucket].push({ key: label, ...stat(cvI, 200) });
+        };
+        for (const key of Object.keys(ITEM_KINDS)) {
+            paintEntity(() => {
+                const it = new Item(window.GAME, { kind: key, x: window.GAME.cam.x, z: 1.5, y: 0 });
+                it.grounded = true; it.t = 0; it.life = 0;
+                it.draw(ci);
+            }, key, 'items');
+        }
+        for (const key of ['crate', 'urn']) {
+            paintEntity(() => {
+                const b = new Breakable(window.GAME, { kind: key, x: window.GAME.cam.x, z: 1.5 });
+                b.draw(ci);
+            }, key, 'breakables');
+        }
 
         // —— 全身立绘 ——
         const cvF = document.createElement('canvas');
@@ -89,6 +121,19 @@ const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/
         if (flag !== '✅') bad++;
         console.log(`  ${flag === '✅' ? '·' : '!'} ${f.key.padEnd(11)} 像素 ${String(f.n).padStart(6)}  包围盒 ${f.w}x${f.h} @(${f.x0},${f.y0})  ${flag}`);
     }
+
+    const check = (title, list, minW) => {
+        console.log(`\n=== ${title} ===`);
+        for (const o of list) {
+            if (!o.n) { console.log(`  ✗ ${o.key}: 未绘制`); bad++; continue; }
+            const over = o.x0 <= 0 || o.x1 >= 139 || o.y0 <= 0 || o.y1 >= 109;
+            const flag = over ? '⚠ 出画' : (o.w < minW ? '⚠ 过小' : '✅');
+            if (flag !== '✅') bad++;
+            console.log(`  ${flag === '✅' ? '·' : '!'} ${o.key.padEnd(10)} 像素 ${String(o.n).padStart(5)}  包围盒 ${o.w}x${o.h} @(${o.x0},${o.y0})  ${flag}`);
+        }
+    };
+    check('掉落道具', r.items, 17);
+    check('可破坏物', r.breakables, 26);
 
     if (r.errors.length) { bad += r.errors.length; console.log('\n绘制异常:'); r.errors.forEach(e => console.log('  ' + e)); }
     console.log(`\n${bad === 0 && errs.length === 0 ? '美术自检通过 ✅' : '存在问题 ⚠ 共 ' + (bad + errs.length) + ' 处'}`);
