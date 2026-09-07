@@ -600,8 +600,15 @@ class UI {
         txt(ctx, L.sub, VIEW.W / 2, 292, 18, U.rgba(C.white, 0.86), 'center', { weight: 500 });
         ctx.strokeStyle = U.rgba(C.gold, 0.7); ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(VIEW.W / 2 - 150, 268); ctx.lineTo(VIEW.W / 2 + 150, 268);
+        ctx.moveTo(VIEW.W / 2 - 150, 268); ctx.lineTo(VIEW.W / 2 - 16, 268);
+        ctx.moveTo(VIEW.W / 2 + 16, 268); ctx.lineTo(VIEW.W / 2 + 150, 268);
         ctx.stroke();
+        // 中央菱形：汉画砖常见的方胜纹
+        ctx.fillStyle = U.rgba(C.gold, 0.85);
+        ctx.save();
+        ctx.translate(VIEW.W / 2, 268); ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-6, -6, 12, 12);
+        ctx.restore();
         ctx.restore();
     }
 
@@ -661,6 +668,7 @@ class UI {
             U.roundRect(ctx, VIEW.W / 2 - 190, y - 20, 380, 32, 6);
             ctx.fillStyle = 'rgba(40,29,20,0.66)'; ctx.fill();
             ctx.strokeStyle = U.rgba(C.gold, 0.32); ctx.lineWidth = 1.2; ctx.stroke();
+            this.hook(ctx, VIEW.W / 2 - 187, y - 17, 374, 26, 9, U.rgba(C.gold, 0.45), 1.3);
             txt(ctx, k, VIEW.W / 2 - 170, y + 2, 15, U.rgba(C.white, 0.8), 'left', { weight: 500 });
             txt(ctx, v, VIEW.W / 2 + 170, y + 2, 17, C.gold, 'right', { weight: 700 });
             ctx.restore();
