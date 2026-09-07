@@ -434,6 +434,7 @@ class UI {
             U.roundRect(ctx, VIEW.W / 2 - bw / 2, by - 17, bw, 28, 5);
             ctx.fillStyle = 'rgba(40,29,20,0.55)'; ctx.fill();
             ctx.strokeStyle = U.rgba(C.gold, 0.26); ctx.lineWidth = 1; ctx.stroke();
+            this.hook(ctx, VIEW.W / 2 - bw / 2 + 3, by - 14, bw - 6, 22, 9, U.rgba(C.gold, 0.5), 1.4);
             txt(ctx, '最高战功', VIEW.W / 2 - bw / 2 + 14, by + 3, 13, U.rgba(C.white, 0.62), 'left', { weight: 500 });
             txt(ctx, String(g.bestScore), VIEW.W / 2 + bw / 2 - 14, by + 3, 15, C.gold, 'right', { weight: 700 });
             ctx.restore();
@@ -533,6 +534,8 @@ class UI {
             ctx.lineWidth = sel ? 3 : 1.6;
             ctx.strokeStyle = sel ? C.gold : 'rgba(242,193,78,0.34)';
             ctx.stroke();
+            this.hook(ctx, x - cw / 2 + 4, cy - ch / 2 - 2, cw - 8, ch - 8, 12,
+                sel ? U.rgba(C.gold, 0.9) : 'rgba(242,193,78,0.3)', sel ? 2.2 : 1.4);
 
             // 立绘
             ctx.save();
@@ -560,6 +563,7 @@ class UI {
         U.roundRect(ctx, pxx, pyy, pw, ph, 10);
         ctx.fillStyle = 'rgba(20,14,10,0.86)'; ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = U.rgba(C.gold, 0.6); ctx.stroke();
+        this.hook(ctx, pxx + 4, pyy + 4, pw - 8, ph - 8, 16, U.rgba(C.gold, 0.8), 2);
 
         txt(ctx, look.name, pxx + 22, pyy + 34, 27, C.gold, 'left', { stroke: C.ink, strokeW: 5 });
         txt(ctx, '「' + look.title + '」', pxx + 130, pyy + 33, 14, C.dim, 'left', { weight: 500 });
