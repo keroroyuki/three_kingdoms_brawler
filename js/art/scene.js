@@ -87,8 +87,8 @@ class PlainsScene extends Scene {
     constructor() {
         super({
             width: 5400,
-            tint: 'rgba(255,170,80,0.055)',
-            weatherCount: 46
+            tint: 'rgba(168,102,54,0.11)',
+            weatherCount: 62
         });
     }
 
@@ -107,30 +107,31 @@ class PlainsScene extends Scene {
     _sky() {
         const cv = mkCanvas(VIEW.W, VIEW.H), c = cv.getContext('2d');
         const g = c.createLinearGradient(0, 0, 0, GROUND.top + 40);
-        g.addColorStop(0.00, '#1E5FA8');
-        g.addColorStop(0.34, '#4E92D0');
-        g.addColorStop(0.66, '#9FD0E8');
-        g.addColorStop(0.88, '#F7D9A0');
-        g.addColorStop(1.00, '#FBBE74');
+        g.addColorStop(0.00, '#221D2B');
+        g.addColorStop(0.28, '#3B2B31');
+        g.addColorStop(0.55, '#66382A');
+        g.addColorStop(0.78, '#A05B2C');
+        g.addColorStop(0.93, '#D0913F');
+        g.addColorStop(1.00, '#E5AC5E');
         c.fillStyle = g; c.fillRect(0, 0, VIEW.W, VIEW.H);
-        // 落日：居中并扩大光晕，避免单侧硬边造成竖直接缝
-        const sx = 400, sy = 320;
-        const sg = c.createRadialGradient(sx, sy, 6, sx, sy, 360);
-        sg.addColorStop(0, 'rgba(255,240,190,0.85)');
-        sg.addColorStop(0.22, 'rgba(255,206,120,0.42)');
-        sg.addColorStop(0.55, 'rgba(255,180,90,0.16)');
-        sg.addColorStop(1, 'rgba(255,180,90,0)');
-        c.fillStyle = sg; c.beginPath(); c.arc(sx, sy, 360, 0, TAU); c.fill();
-        c.fillStyle = '#FFF1C4'; c.beginPath(); c.arc(sx, sy, 24, 0, TAU); c.fill();
+        // 落日：压低到近地平线，加大烟尘光晕，营造「烽烟蔽日」的战乱黄昏
+        const sx = 432, sy = 372;
+        const sg = c.createRadialGradient(sx, sy, 4, sx, sy, 320);
+        sg.addColorStop(0, 'rgba(255,216,152,0.95)');
+        sg.addColorStop(0.20, 'rgba(242,164,88,0.50)');
+        sg.addColorStop(0.55, 'rgba(198,110,60,0.20)');
+        sg.addColorStop(1, 'rgba(198,110,60,0)');
+        c.fillStyle = sg; c.beginPath(); c.arc(sx, sy, 320, 0, TAU); c.fill();
+        c.fillStyle = '#FFDFAB'; c.beginPath(); c.arc(sx, sy, 19, 0, TAU); c.fill();
         return cv;
     }
 
     _far() {
         const W = this.width, H = 220, cv = mkCanvas(W, H), c = cv.getContext('2d');
         const layers = [
-            { col: '#7E9BB0', y: 150, h: 92, n: 5, seed: 3 },
-            { col: '#5F7E96', y: 176, h: 72, n: 7, seed: 17 },
-            { col: '#46627A', y: 200, h: 54, n: 9, seed: 41 }
+            { col: '#5A4636', y: 150, h: 92, n: 5, seed: 3 },
+            { col: '#423125', y: 176, h: 72, n: 7, seed: 17 },
+            { col: '#2A2018', y: 200, h: 54, n: 9, seed: 41 }
         ];
         const scale = Math.max(1, Math.round(W / 1400));
         layers.forEach(L => { L.n = Math.max(3, Math.round(L.n * scale));
@@ -149,7 +150,7 @@ class PlainsScene extends Scene {
         // 山顶薄雾
         const mg = c.createLinearGradient(0, 120, 0, 220);
         mg.addColorStop(0, 'rgba(255,255,255,0)');
-        mg.addColorStop(1, 'rgba(235,244,250,0.55)');
+        mg.addColorStop(1, 'rgba(214,168,116,0.42)');
         c.fillStyle = mg; c.fillRect(0, 120, W, 100);
         return cv;
     }
@@ -164,8 +165,8 @@ class PlainsScene extends Scene {
                 draw(offset + i * spacing + U.hash(i * 5.5 + spacing) * spacing * 0.30, i);
             }
         };
-        // 远树带
-        c.fillStyle = '#3E6141';
+        // 远树带（焦枯荒原）
+        c.fillStyle = '#3A2D20';
         const treeN = Math.round(W / 24);
         for (let i = 0; i < treeN; i++) {
             const x = U.hash(i * 1.7) * W, h = 22 + U.hash(i * 3.1) * 26;
@@ -173,8 +174,8 @@ class PlainsScene extends Scene {
             c.ellipse(x, 196 - h * 0.5, 11 + U.hash(i) * 6, h * 0.62, 0, 0, TAU);
             c.fill();
         }
-        // 桃林（第一关「桃园结义」的时令之花）
-        row(150, 40, (x, i) => this._blossomTree(c, x, 198, 0.80 + U.hash(i * 2.2) * 0.55));
+        // 荒原枯树：战乱之后的中原，林木焦枯
+        row(150, 40, (x, i) => this._deadTree(c, x, 198, 0.80 + U.hash(i * 2.2) * 0.55));
         // 坞堡：汉末豪强筑墙自守的庄园，点题乱世
         row(1500, 340, (x, i) => this._blockhouse(c, x, 198, 0.82 + U.hash(i * 4) * 0.22));
         // 烽燧：边塞报警高台
@@ -213,19 +214,27 @@ class PlainsScene extends Scene {
         c.restore();
     }
 
-    _blossomTree(c, x, y, s) {
+    /** 枯树：焦黑扭曲的枝干，战乱荒原的标志性剪影 */
+    _deadTree(c, x, y, s) {
         c.save(); c.translate(x, y); c.scale(s, s);
-        c.fillStyle = '#5D4037';
-        c.fillRect(-3.5, -46, 7, 46);
-        c.strokeStyle = '#4E342E'; c.lineWidth = 2.6;
-        c.beginPath(); c.moveTo(0, -40); c.lineTo(-13, -56); c.moveTo(0, -44); c.lineTo(12, -54); c.stroke();
-        const puffs = [[0, -66, 26], [-19, -54, 19], [18, -55, 20], [-8, -76, 15], [10, -74, 14]];
-        puffs.forEach((p, i) => {
-            c.fillStyle = i % 2 ? '#F8BBD0' : '#F48FB1';
-            c.beginPath(); c.arc(p[0], p[1], p[2], 0, TAU); c.fill();
-        });
-        c.fillStyle = 'rgba(255,255,255,0.35)';
-        c.beginPath(); c.arc(-6, -72, 9, 0, TAU); c.fill();
+        c.strokeStyle = '#33271B'; c.lineCap = 'round';
+        // 主干：自地面扭向上方
+        c.lineWidth = 8.5;
+        c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(-5, -24, -10, -48); c.stroke();
+        c.lineWidth = 5.2;
+        c.beginPath(); c.moveTo(-7, -28); c.quadraticCurveTo(-20, -42, -30, -52); c.stroke();
+        c.beginPath(); c.moveTo(-8, -36); c.quadraticCurveTo(7, -50, 19, -58); c.stroke();
+        c.lineWidth = 3.2;
+        c.beginPath(); c.moveTo(-24, -48); c.lineTo(-33, -60); c.stroke();
+        c.beginPath(); c.moveTo(13, -54); c.lineTo(23, -66); c.stroke();
+        c.beginPath(); c.moveTo(-10, -48); c.lineTo(-16, -64); c.stroke();
+        c.lineWidth = 2;
+        c.beginPath(); c.moveTo(-28, -52); c.lineTo(-37, -60); c.stroke();
+        c.beginPath(); c.moveTo(17, -58); c.lineTo(27, -68); c.stroke();
+        c.beginPath(); c.moveTo(-13, -56); c.lineTo(-11, -70); c.stroke();
+        // 树根
+        c.lineWidth = 3.4;
+        c.beginPath(); c.moveTo(-2, 1); c.lineTo(-11, 3); c.moveTo(2, 1); c.lineTo(11, 3); c.stroke();
         c.restore();
     }
 
@@ -309,34 +318,34 @@ class PlainsScene extends Scene {
         const W = 8000, H = VIEW.H - GROUND.top, cv = mkCanvas(W, H), c = cv.getContext('2d');
         const scale = Math.max(1, W / 800);
         const g = c.createLinearGradient(0, 0, 0, H);
-        g.addColorStop(0, '#7A9B4E');
-        g.addColorStop(0.35, '#6C8F45');
-        g.addColorStop(1, '#546E36');
+        g.addColorStop(0, '#8C7349');
+        g.addColorStop(0.35, '#7A6340');
+        g.addColorStop(1, '#59462C');
         c.fillStyle = g; c.fillRect(0, 0, W, H);
-        // 石板路（中带）
-        c.fillStyle = '#8D8060';
+        // 夯土官道（中带）
+        c.fillStyle = '#9A845C';
         c.fillRect(0, H * 0.44, W, H * 0.30);
-        c.fillStyle = '#9C8F6E';
+        c.fillStyle = '#AC9669';
         c.fillRect(0, H * 0.46, W, H * 0.12);
         for (let i = 0; i < Math.round(26 * scale); i++) {
             const x = U.hash(i * 2.3) * W, y = H * 0.44 + U.hash(i * 5.1) * H * 0.30;
-            c.fillStyle = 'rgba(90,80,58,0.5)';
+            c.fillStyle = 'rgba(84,70,46,0.5)';
             c.fillRect(x, y, 46 + U.hash(i) * 30, 2);
         }
-        // 草丛（越近越大）
+        // 枯草（越近越大）
         for (let i = 0; i < Math.round(260 * scale); i++) {
             const x = U.hash(i * 1.13) * W;
             const ty = U.hash(i * 2.71);
             const y = 4 + ty * ty * (H - 8);
             const h = 3 + ty * 9;
-            c.strokeStyle = ty > 0.5 ? '#4A6B2C' : '#7FA855';
+            c.strokeStyle = ty > 0.5 ? '#5C4B2E' : '#8A7442';
             c.lineWidth = 1 + ty;
             c.beginPath(); c.moveTo(x, y); c.lineTo(x + (U.hash(i * 7) - 0.5) * 5, y - h); c.stroke();
         }
         // 顶部远近过渡暗边
         const sg = c.createLinearGradient(0, 0, 0, 26);
-        sg.addColorStop(0, 'rgba(60,80,50,0.55)');
-        sg.addColorStop(1, 'rgba(60,80,50,0)');
+        sg.addColorStop(0, 'rgba(58,46,28,0.55)');
+        sg.addColorStop(1, 'rgba(58,46,28,0)');
         c.fillStyle = sg; c.fillRect(0, 0, W, 26);
         return cv;
     }
@@ -346,7 +355,8 @@ class PlainsScene extends Scene {
         const n = Math.max(30, Math.round(30 * (W / 900)));
         for (let i = 0; i < n; i++) {
             const x = U.hash(i * 3.9) * W;
-            c.strokeStyle = '#3B5A22'; c.lineWidth = 3 + U.hash(i) * 2;
+            c.strokeStyle = U.hash(i * 2.3) > 0.5 ? '#4A3925' : '#372A1B';
+            c.lineWidth = 3 + U.hash(i) * 2;
             c.beginPath();
             c.moveTo(x, H);
             c.quadraticCurveTo(x + (U.hash(i * 5) - 0.5) * 22, H - 30, x + (U.hash(i * 11) - 0.5) * 40, H - 66 - U.hash(i * 2) * 24);
@@ -355,21 +365,25 @@ class PlainsScene extends Scene {
         return cv;
     }
 
-    /* ---------------- 天气：桃花瓣 ---------------- */
+    /* ---------------- 天气：烟尘与火星 ---------------- */
     _makePart(seedAnywhere) {
+        const ember = U.rand(0, 1) < 0.16;   // 烽燧与战火中带起的余烬
         return {
             x: U.rand(-60, VIEW.W + 60),
             y: seedAnywhere ? U.rand(-20, VIEW.H) : U.rand(-60, -10),
-            vx: U.rand(-26, -8), vy: U.rand(22, 48),
-            r: U.rand(2.2, 4.6), ph: U.rand(0, TAU), sp: U.rand(1.6, 3.2),
+            vx: U.rand(-30, -12),
+            vy: ember ? U.rand(-16, -5) : U.rand(16, 34),
+            r: ember ? U.rand(1.1, 2.1) : U.rand(1.6, 3.4),
+            ph: U.rand(0, TAU), sp: U.rand(1.1, 2.6),
+            ember: ember,
             dead: false
         };
     }
     _updatePart(p, dt) {
         p.ph += dt * p.sp;
-        p.x += (p.vx + Math.sin(p.ph) * 26) * dt;
+        p.x += (p.vx + Math.sin(p.ph) * 22) * dt;
         p.y += p.vy * dt;
-        if (p.y > VIEW.H + 12 || p.x < -70) p.dead = true;
+        if (p.y > VIEW.H + 12 || p.x < -70 || p.y < -24) p.dead = true;
     }
 
     drawSky(ctx) { ctx.drawImage(this.sky, 0, 0); }
@@ -381,7 +395,7 @@ class PlainsScene extends Scene {
             cl.x -= cl.v * 0.016;
             if (cl.x < -220) cl.x = 1500;
             const x = ((cl.x - camX * 0.045) % 1720 + 1720) % 1720 - 220;
-            ctx.fillStyle = 'rgba(255,252,244,0.66)';
+            ctx.fillStyle = 'rgba(232,192,146,0.52)';
             ctx.beginPath();
             ctx.ellipse(x, cl.y, 62 * cl.s, 15 * cl.s, 0, 0, TAU);
             ctx.ellipse(x + 34 * cl.s, cl.y + 5 * cl.s, 44 * cl.s, 12 * cl.s, 0, 0, TAU);
@@ -407,14 +421,23 @@ class PlainsScene extends Scene {
     drawWeather(ctx) {
         ctx.save();
         for (const p of this.parts) {
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate(Math.sin(p.ph) * 0.9);
-            ctx.fillStyle = '#F8BBD0';
-            ctx.beginPath();
-            ctx.ellipse(0, 0, p.r, p.r * 0.55, 0, 0, TAU);
-            ctx.fill();
-            ctx.restore();
+            if (p.ember) {
+                // 火星：缓速上飘的余烬，暖核 + 冷晕
+                ctx.fillStyle = 'rgba(255,148,58,0.70)';
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 2.1, 0, TAU); ctx.fill();
+                ctx.fillStyle = 'rgba(255,214,140,0.95)';
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+            } else {
+                // 烟尘：斜风里漂的灰
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(Math.sin(p.ph) * 0.5);
+                ctx.fillStyle = 'rgba(118,98,78,0.32)';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, p.r, p.r * 0.5, 0, 0, TAU);
+                ctx.fill();
+                ctx.restore();
+            }
         }
         ctx.restore();
     }
@@ -716,7 +739,7 @@ class FireScene extends Scene {
  * ========================================================== */
 class PalaceScene extends Scene {
     constructor() {
-        super({ width: 5800, tint: 'rgba(40,80,160,0.10)', weatherCount: 90 });
+        super({ width: 5800, tint: 'rgba(58,52,86,0.12)', weatherCount: 90 });
     }
 
     _buildStatic() {
@@ -734,27 +757,27 @@ class PalaceScene extends Scene {
     _sky() {
         const cv = mkCanvas(VIEW.W, VIEW.H), c = cv.getContext('2d');
         const g = c.createLinearGradient(0, 0, 0, GROUND.top + 30);
-        g.addColorStop(0.00, '#050A1E');
-        g.addColorStop(0.42, '#12224E');
-        g.addColorStop(0.74, '#2B4380');
-        g.addColorStop(1.00, '#5A6FA8');
+        g.addColorStop(0.00, '#0A0C17');
+        g.addColorStop(0.42, '#131A2C');
+        g.addColorStop(0.74, '#222A40');
+        g.addColorStop(1.00, '#38405A');
         c.fillStyle = g; c.fillRect(0, 0, VIEW.W, VIEW.H);
         for (let i = 0; i < 90; i++) {
             const x = U.hash(i * 2.7) * VIEW.W, y = U.hash(i * 5.3) * 300;
-            const a = 0.25 + U.hash(i * 9) * 0.6;
-            c.fillStyle = `rgba(230,240,255,${a})`;
+            const a = 0.14 + U.hash(i * 9) * 0.42;
+            c.fillStyle = `rgba(212,220,238,${a})`;
             const r = U.hash(i * 11) > 0.9 ? 1.9 : 1.1;
             c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
         }
         // 月
         const mx = 148, my = 92;
         const mg = c.createRadialGradient(mx, my, 8, mx, my, 118);
-        mg.addColorStop(0, 'rgba(240,246,255,0.55)');
-        mg.addColorStop(0.35, 'rgba(200,220,255,0.18)');
-        mg.addColorStop(1, 'rgba(150,190,255,0)');
+        mg.addColorStop(0, 'rgba(228,236,250,0.46)');
+        mg.addColorStop(0.35, 'rgba(188,204,236,0.15)');
+        mg.addColorStop(1, 'rgba(140,170,210,0)');
         c.fillStyle = mg; c.beginPath(); c.arc(mx, my, 118, 0, TAU); c.fill();
-        c.fillStyle = '#F3F6FB'; c.beginPath(); c.arc(mx, my, 30, 0, TAU); c.fill();
-        c.fillStyle = 'rgba(200,214,240,0.55)';
+        c.fillStyle = '#E8ECF4'; c.beginPath(); c.arc(mx, my, 30, 0, TAU); c.fill();
+        c.fillStyle = 'rgba(186,198,222,0.55)';
         c.beginPath(); c.arc(mx - 9, my - 6, 6, 0, TAU); c.arc(mx + 8, my + 7, 4.5, 0, TAU); c.arc(mx + 3, my - 12, 3, 0, TAU); c.fill();
         return cv;
     }
@@ -766,11 +789,11 @@ class PalaceScene extends Scene {
         const step = W / n;
         for (let i = 0; i < n; i++) {
             const x = (i + 0.5) * step;
-            this._palace(c, x, 232, 0.55 + U.hash(i * 3) * 0.45, '#1B2A52', '#24365F');
+            this._palace(c, x, 232, 0.55 + U.hash(i * 3) * 0.45, '#1A1E30', '#232A3E');
         }
         const mg = c.createLinearGradient(0, 150, 0, 232);
-        mg.addColorStop(0, 'rgba(90,130,200,0)');
-        mg.addColorStop(1, 'rgba(90,130,200,0.35)');
+        mg.addColorStop(0, 'rgba(110,114,148,0)');
+        mg.addColorStop(1, 'rgba(110,114,148,0.28)');
         c.fillStyle = mg; c.fillRect(0, 150, W, 82);
         return cv;
     }
@@ -871,10 +894,10 @@ class PalaceScene extends Scene {
     _mid() {
         const W = this.width, H = 250, cv = mkCanvas(W, H), c = cv.getContext('2d');
         // 宫墙
-        c.fillStyle = '#7A1F1C'; c.fillRect(0, 150, W, 100);
-        c.fillStyle = '#5E1512';
+        c.fillStyle = '#6A1A17'; c.fillRect(0, 150, W, 100);
+        c.fillStyle = '#4E1210';
         for (let i = 0; i < W; i += 40) c.fillRect(i, 150, 2, 100);
-        c.fillStyle = '#C9A227'; c.fillRect(0, 146, W, 6);
+        c.fillStyle = '#B8912A'; c.fillRect(0, 146, W, 6);
         c.fillStyle = '#2B2B2B'; c.fillRect(0, 152, W, 6);
         // 宫门 + 角楼
         const gates = Math.max(4, Math.round(W / 1200));
@@ -882,7 +905,7 @@ class PalaceScene extends Scene {
         for (let i = 0; i < gates; i++) {
             const x = gateSpacing * (0.5 + i);
             // 城台（夯土包砖）
-            c.fillStyle = '#6E1B18'; c.fillRect(x - 58, 168, 116, 82);
+            c.fillStyle = '#5C1614'; c.fillRect(x - 58, 168, 116, 82);
             c.fillStyle = 'rgba(82,18,15,0.55)';
             for (let k = -58; k < 58; k += 13) c.fillRect(x + k, 168, 2, 82);
             // 门洞（券门）
@@ -892,27 +915,27 @@ class PalaceScene extends Scene {
             c.quadraticCurveTo(x, 160, x + 34, 188); c.lineTo(x + 34, 250);
             c.closePath(); c.fill();
             // 门钉（九路门钉，宫门制）
-            c.fillStyle = '#C9A227';
+            c.fillStyle = '#B8912A';
             for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) {
                 c.beginPath(); c.arc(x - 21 + k * 14, 199 + r * 15, 2.2, 0, TAU); c.fill();
             }
             // 檐下斗拱 + 城楼屋檐（以原点为中心绘制，故先平移至门轴）
             c.save(); c.translate(x, 0);
             this._dougong(c, 50, 168, '#B8860B', '#6D4C1F');
-            this._eave(c, 66, 162, 22, '#1F3A6E', 'rgba(255,225,170,0.30)');
+            this._eave(c, 66, 162, 22, '#22304A', 'rgba(255,225,170,0.30)');
             c.restore();
             // 正脊与鸱吻
-            c.fillStyle = '#1F3A6E'; c.fillRect(x - 32, 128, 64, 13);
-            this._chiwen(c, x - 32, 128, 1.0, '#C9A227');
+            c.fillStyle = '#22304A'; c.fillRect(x - 32, 128, 64, 13);
+            this._chiwen(c, x - 32, 128, 1.0, '#B8912A');
             c.save(); c.translate(x + 32, 128); c.scale(-1, 1);
-            this._chiwen(c, 0, 0, 1.0, '#C9A227'); c.restore();
+            this._chiwen(c, 0, 0, 1.0, '#B8912A'); c.restore();
             // 两侧子阙（汉阙形制：母阙 + 子阙）
             [-1, 1].forEach((d) => {
                 const qx = x + d * 76;
                 c.save(); c.translate(qx, 0);
-                c.fillStyle = '#6E1B18'; c.fillRect(-9, 198, 18, 52);
+                c.fillStyle = '#5C1614'; c.fillRect(-9, 198, 18, 52);
                 c.fillStyle = 'rgba(82,18,15,0.5)'; c.fillRect(-9, 198, 18, 4);
-                this._eave(c, 17, 198, 10, '#1F3A6E', 'rgba(255,225,170,0.26)');
+                this._eave(c, 17, 198, 10, '#22304A', 'rgba(255,225,170,0.26)');
                 c.restore();
             });
         }
@@ -923,7 +946,7 @@ class PalaceScene extends Scene {
             const x = lampStep * (0.5 + i) + U.hash(i) * 30;
             c.fillStyle = '#8A8F96'; c.fillRect(x - 6, 196, 12, 54);
             c.fillStyle = '#A6ABB2'; c.fillRect(x - 13, 176, 26, 22);
-            c.fillStyle = '#FFD79A'; c.fillRect(x - 8, 181, 16, 12);
+            c.fillStyle = '#F0C070'; c.fillRect(x - 8, 181, 16, 12);
         }
         return cv;
     }

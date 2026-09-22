@@ -182,7 +182,7 @@ class FX {
             ctx.translate(g.x, g.y);
             ctx.scale(g.facing * g.sc, g.sc);
             ctx.translate(0, -FOOT_OFF);
-            Fig.draw(ctx, g.look, Fig.solve(g.pose), { time: g.time, ghost: true, tint: '#7FD8FF' });
+            Fig.draw(ctx, g.look, Fig.solve(g.pose, g.look.body), { time: g.time, ghost: true, tint: '#7FD8FF' });
             ctx.restore();
         }
 
@@ -241,10 +241,22 @@ class FX {
                 ctx.arc(0, 0, R, -1.0 + k * 0.55, 0.85 + k * 0.55);
             } else if (a.kind === 'v') {
                 ctx.arc(0, -34 * S, R * 0.9, -0.3 + k * 0.5, 2.1 + k * 0.5);
+            } else if (a.kind === 'c') {
+                ctx.arc(0, -20 * S, R * 0.5, -0.8, 0.8);
             } else { // thrust 直刺
                 ctx.arc(0, -30 * S, R * 0.85, -0.42, 0.42);
             }
+            // 外发光层：同色、更宽更淡，lighter 叠加形成拖尾渐变
+            ctx.globalAlpha = (1 - k) * 0.24;
+            ctx.lineWidth = 22 * S * (1 - k * 0.3);
+            ctx.strokeStyle = a.hue;
             ctx.stroke();
+            // 主体层
+            ctx.globalAlpha = (1 - k) * 0.9;
+            ctx.lineWidth = 9 * S * (1 - k * 0.55);
+            ctx.strokeStyle = a.hue;
+            ctx.stroke();
+            // 白芯
             ctx.globalAlpha = (1 - k) * 0.42;
             ctx.lineWidth = 3 * S;
             ctx.strokeStyle = '#FFFFFF';

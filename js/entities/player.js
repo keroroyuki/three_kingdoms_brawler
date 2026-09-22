@@ -20,7 +20,7 @@ const HERO_KIT = {
         combo: [
             { frames: Fig.atk1Frames, dur: 0.50, hitAt: 0.22, dmgMul: 1.10, reachMul: 1.20, kb: 1.9, sound: 'swingHeavy' },
             { frames: Fig.atk2Frames, dur: 0.50, hitAt: 0.20, dmgMul: 1.15, reachMul: 1.20, kb: 2.1, sound: 'swingHeavy' },
-            { frames: Fig.atk3Frames, dur: 0.66, hitAt: 0.30, dmgMul: 1.95, reachMul: 1.35, kb: 3.8, kbUp: 2.4, launch: true, heavy: true, sound: 'swingHeavy' }
+            { frames: Fig.atkSweepHeavy, dur: 0.66, hitAt: 0.30, dmgMul: 1.95, reachMul: 1.35, kb: 3.8, kbUp: 2.4, launch: true, heavy: true, sound: 'swingHeavy' }
         ],
         skill: 'sweep', skillName: '青龙偃月 · 拖刀斩'
     },
@@ -28,7 +28,7 @@ const HERO_KIT = {
         combo: [
             { frames: Fig.atk1Frames, dur: 0.48, hitAt: 0.20, dmgMul: 1.15, reachMul: 1.22, kb: 2.0, sound: 'swingHeavy' },
             { frames: Fig.atk2Frames, dur: 0.48, hitAt: 0.18, dmgMul: 1.20, reachMul: 1.22, kb: 2.2, sound: 'swingHeavy' },
-            { frames: Fig.atk3Frames, dur: 0.62, hitAt: 0.28, dmgMul: 2.00, reachMul: 1.30, kb: 4.0, kbUp: 2.5, launch: true, heavy: true, sound: 'swingHeavy' }
+            { frames: Fig.atkThrustHeavy, dur: 0.62, hitAt: 0.28, dmgMul: 2.00, reachMul: 1.30, kb: 4.0, kbUp: 2.5, launch: true, heavy: true, sound: 'swingHeavy' }
         ],
         skill: 'roar', skillName: '丈八蛇矛 · 当阳怒吼'
     },
@@ -36,7 +36,7 @@ const HERO_KIT = {
         combo: [
             { frames: Fig.atk1Frames, dur: 0.36, hitAt: 0.15, dmgMul: 0.95, reachMul: 1.10, kb: 1.3, sound: 'swing' },
             { frames: Fig.atk2Frames, dur: 0.36, hitAt: 0.13, dmgMul: 1.00, reachMul: 1.10, kb: 1.5, sound: 'swing' },
-            { frames: Fig.atk3Frames, dur: 0.54, hitAt: 0.24, dmgMul: 1.65, reachMul: 1.25, kb: 3.2, kbUp: 2.1, launch: true, heavy: true, sound: 'swingHeavy' }
+            { frames: Fig.atkThrustHeavy, dur: 0.54, hitAt: 0.24, dmgMul: 1.65, reachMul: 1.25, kb: 3.2, kbUp: 2.1, launch: true, heavy: true, sound: 'swingHeavy' }
         ],
         skill: 'thrust', skillName: '龙胆亮银枪 · 七进七出'
     },
@@ -44,7 +44,7 @@ const HERO_KIT = {
         combo: [
             { frames: Fig.atk1Frames, dur: 0.40, hitAt: 0.17, dmgMul: 0.90, reachMul: 1.05, kb: 1.4, sound: 'swing' },
             { frames: Fig.atk2Frames, dur: 0.40, hitAt: 0.15, dmgMul: 0.95, reachMul: 1.05, kb: 1.6, sound: 'swing' },
-            { frames: Fig.atk3Frames, dur: 0.56, hitAt: 0.25, dmgMul: 1.60, reachMul: 1.15, kb: 3.2, kbUp: 2.0, launch: true, heavy: true, sound: 'swingHeavy' }
+            { frames: Fig.atkCastHeavy, dur: 0.56, hitAt: 0.25, dmgMul: 1.60, reachMul: 1.15, kb: 3.2, kbUp: 2.0, launch: true, heavy: true, sound: 'swingHeavy' }
         ],
         skill: 'meteor', skillName: '卧龙 · 八阵雷火'
     }
@@ -525,7 +525,8 @@ class Player extends Actor {
     die(h) {
         if (this.dead) return;
         this.lives--;
-        this.game.audio.play('gameover');
+        // 掉命音效由 Actor.die 的 'ko' 承担；'gameover' 留给真正结束时的
+        // Game.gameOver()，否则还有命数时也会误播结束音效
         this.game.fx.addFlash(0.7, '#FF5A3C');
         this.game.fx.addShake(14);
         this.combo = 0;

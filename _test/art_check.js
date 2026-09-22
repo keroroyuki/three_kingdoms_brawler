@@ -74,7 +74,7 @@ const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/
         for (const key of Object.keys(LOOKS)) {
             cf.clearRect(0, 0, 320, 300);
             try {
-                const s = Fig.solve(Fig.idle(0.4));
+                const s = Fig.solve(Fig.idle(0.4, LOOKS[key]), LOOKS[key].body);
                 cf.save(); cf.translate(160, 285); cf.scale(74, 74);
                 Fig.draw(cf, LOOKS[key], s, { time: 0.4, facing: 1 });
                 cf.restore();
@@ -92,7 +92,7 @@ const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/
             cw.clearRect(0, 0, 420, 200);
             const look = Object.assign({}, LOOKS.guanyu, { weapon: wp });
             try {
-                const s = Fig.solve(Fig.idle(0.4));
+                const s = Fig.solve(Fig.idle(0.4, look), look.body);
                 cw.save(); cw.translate(120, 100); cw.scale(78, 78);
                 Fig.draw(cw, look, s, { time: 0.4, facing: 1 });
                 cw.restore();

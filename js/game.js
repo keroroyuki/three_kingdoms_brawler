@@ -37,6 +37,7 @@ class Game {
         this.items = [];
         this.breakables = [];
         this.timers = [];
+        this.spawnQueue = [];
 
         this.arena = { min: 0.8, max: 20 };
         this.softArena = { min: 0, max: 40 };
@@ -155,7 +156,6 @@ class Game {
         };
         window.addEventListener('keydown', unlock, { once: false });
         window.addEventListener('pointerdown', unlock, { once: false });
-        this.canvas.addEventListener('pointerdown', () => { this.audio.init(); this.audio.resume(); });
 
         // 切走窗口/标签页时自动暂停：避免玩家回来时已经被打死
         const autoPause = () => {
@@ -211,6 +211,9 @@ class Game {
         this.breakables.length = 0;
         this.timers.length = 0;
         this.tokenHolders.length = 0;
+        // 必须清空：updateWorld 会无视 waveState 继续吐刷怪队列，上一波残留的
+        // 敌人会以旧闸门坐标复活，并拖住新波的 clearWave 判定
+        this.spawnQueue.length = 0;
         this.fx.clear();
         this.boss = null;
         this.bossActive = false;
@@ -474,8 +477,7 @@ class Game {
                 this._monitorPerf(rawDt);
             } catch (e) {
                 // 单帧异常不应冻结整个游戏：记录一次后继续
-                if (!this._errCount) this._errCount = 0;
-                this._errCount++;
+                this._errCount = (this._errCount || 0) + 1;
                 if (this._errCount <= 3) {
                     window.__loopErr = (e && e.stack) || String(e);
                     console.error('[frame error]', e);
@@ -492,12 +494,13 @@ class Game {
         this.handleStateKeys();
 
         switch (this.state) {
-            case ST.TITLE: this.updateTitle(dt); break;
-            case ST.HELP: this.scene.update(dt, this.cam.x * PPM); break;
-            case ST.SELECT: this.updateSelect(dt); break;
+            case ST.TITLE: this.updateTitle(dt); this.fx.update(dt); break;
+            case ST.HELP: this.scene.update(dt, this.cam.x * PPM); this.fx.update(dt); break;
+            case ST.SELECT: this.updateSelect(dt); this.fx.update(dt); break;
             case ST.INTRO:
                 this.introT += dt;
                 this.scene.update(dt, this.cam.x * PPM);
+                this.fx.update(dt);
                 if (this.introT > 3.2 || this.input.justPressed('start')) {
                     this.state = ST.PLAY; this.input.flush();
                 }
@@ -823,8 +826,8 @@ class Game {
         const k = this.state === ST.TITLE ? 132 : 108;
         ctx.scale(k, k);
         ctx.translate(0, -FOOT_OFF);
-        const pose = Fig.blend(Fig.idle(t * 0.8), Fig.idle(t * 0.8 + 0.1), 0.5);
-        Fig.draw(ctx, look, Fig.solve(pose), { time: t });
+        const pose = Fig.blend(Fig.idle(t * 0.8, look), Fig.idle(t * 0.8 + 0.1, look), 0.5);
+        Fig.draw(ctx, look, Fig.solve(pose, look.body), { time: t });
         ctx.restore();
     }
 

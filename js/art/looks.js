@@ -14,6 +14,8 @@ const LOOKS = {
         head: 'crown', hair: '#2B1B12', bandColor: '#FFD700',
         robeStyle: 'long', ribbon: '#C62828',
         weapon: 'jian', offhand: 'jianShort',
+        // 站姿：中正平和、双剑斜持——仁厚之主不急不躁
+        stance: { lean: 0.03, headTilt: -0.01, armB: [1.36, 0.34], armF: [1.16, 0.32], legB: [1.62, -0.04], legF: [1.60, -0.06], weapon: 0.02 },
         steel: '#DDE3E8', grip: '#6D4C33',
         cape: '#1B5E20',
         // 演义：「两耳垂肩，双手过膝，目能自顾其耳，面如冠玉，唇若涂脂」
@@ -25,6 +27,8 @@ const LOOKS = {
     guanyu: {
         name: '关羽', title: '义薄云天',
         build: 1.12,
+        // 体形：清瘦修长、肩收胯窄——长髯与偃月刀才是他的体量，而非肌肉
+        body: { shoulderW: 0.96, torsoW: 0.93, hipW: 0.95, armW: 0.94, legW: 0.95, headR: 0.95 },
         // 面如重枣：演义载其「面如重枣，唇若涂脂，丹凤眼，卧蚕眉」
         skin: '#C4674A', skinDark: '#9C4A32', skinLight: '#DC8A66',
         blush: '#A84E36',
@@ -36,6 +40,8 @@ const LOOKS = {
         pants: '#263238', boot: '#3E2723',
         head: 'topknot', hair: '#1A1410', bandColor: '#1B5E20',
         beard: 'long', beardColor: '#1A1410',
+        // 站姿：重心压后脚、前手按刀柄、微仰头——义薄云天的傲气
+        stance: { lean: 0.05, headTilt: -0.09, armB: [1.50, 0.34], armF: [0.95, 0.22], legB: [1.72, -0.03], legF: [1.50, -0.05], weapon: -0.16 },
         robeStyle: 'long', cape: '#8B0000',
         // 青龙偃月刀：刃带青冷之色，故名「青龙」
         weapon: 'guandao', wood: '#5D4037', steel: '#D9E8EC', steelLight: '#EFF8FA',
@@ -44,13 +50,17 @@ const LOOKS = {
     },
     zhangfei: {
         name: '张飞', title: '万人敌',
-        build: 1.20, skin: '#D9A066', skinDark: '#B07E49',
+        build: 1.20,
+        // 体形：虎背熊腰的壮汉——肩宽胯厚，臂腿粗如树桩
+        body: { shoulderW: 1.44, torsoW: 1.34, hipW: 1.30, armW: 1.34, legW: 1.30, headR: 1.12 }, skin: '#D9A066', skinDark: '#B07E49',
         robe: '#263238', robeDark: '#161D21', robeLight: '#37474F',
         skirt: '#1B2429', sash: '#C62828', trim: '#FFD700',
         armor: '#455A64', armorLight: '#607D8B',
         pants: '#1B2429', boot: '#2B1B12',
         head: 'wild', hair: '#14100E', bandColor: '#37474F',
         beard: 'stubble', beardColor: '#14100E',
+        // 站姿：阔步张臂、上身前倾——虎背熊腰的悍将威势
+        stance: { lean: 0.12, headTilt: 0.03, armB: [1.20, 0.30], armF: [1.38, 0.34], legB: [1.82, -0.02], legF: [1.40, -0.02], weapon: -0.22 },
         robeStyle: 'short',
         weapon: 'spear', steel: '#D6DBE0', tassel: '#C62828',
         // 演义形象：豹头环眼、燕颔虎须，声若巨雷、势如奔马
@@ -60,13 +70,17 @@ const LOOKS = {
     },
     zhaoyun: {
         name: '赵云', title: '常胜将军',
-        build: 1.0, skin: '#F5CFA8', skinDark: '#D2A67C',
+        build: 1.0,
+        // 体形：少年将军——肩宽腰窄的倒三角，精干利落
+        body: { shoulderW: 1.20, torsoW: 0.94, hipW: 1.02, armW: 1.06, legW: 1.04, headR: 0.96 }, skin: '#F5CFA8', skinDark: '#D2A67C',
         robe: '#ECEFF1', robeDark: '#B0BEC5', robeLight: '#FFFFFF',
         skirt: '#CFD8DC', sash: '#1976D2', trim: '#C9A227',
         armor: '#CFD8DC', armorLight: '#F5F5F5',
         pants: '#37474F', boot: '#455A64',
         head: 'helm', hair: '#1A1410', plume: '#D32F2F',
         robeStyle: 'short', ribbon: '#1976D2',
+        // 站姿：前倾蓄势、前手举枪低、仰头警觉——常胜将军的敏锐
+        stance: { lean: 0.09, headTilt: -0.08, armB: [1.26, 0.32], armF: [0.92, 0.22], legB: [1.72, -0.03], legF: [1.50, -0.05], weapon: -0.06 },
         weapon: 'lance', steel: '#E8EDF2', tassel: '#D32F2F', wood: '#4E342E',
         // 演义形象：白袍银铠的少年将军，浓眉大眼、英气逼人
         face: { shape: 'oval', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.28 },
@@ -75,12 +89,16 @@ const LOOKS = {
     },
     zhugeliang: {
         name: '诸葛亮', title: '卧龙',
-        build: 0.93, skin: '#F7D6B0', skinDark: '#D7B088',
+        build: 0.93,
+        // 体形：文士清瘦——窄肩细身，鹤氅下的文人骨架
+        body: { shoulderW: 0.90, torsoW: 0.86, hipW: 0.92, armW: 0.88, legW: 0.90, headR: 0.95 }, skin: '#F7D6B0', skinDark: '#D7B088',
         robe: '#E3F2FD', robeDark: '#90CAF9', robeLight: '#FFFFFF',
         skirt: '#BBDEFB', sash: '#5D4037', trim: '#8D6E63',
         pants: '#E3F2FD', boot: '#4E342E',
         head: 'cap', hair: '#2B1B12', bandColor: '#ECEFF1',
         beard: 'goatee', beardColor: '#2B1B12',
+        // 站姿：身姿笔直、并腿、双手垂侧持扇——文士端立的从容
+        stance: { lean: 0.00, headTilt: -0.01, armB: [1.52, 0.38], armF: [1.44, 0.38], legB: [1.60, -0.02], legF: [1.60, -0.02], weapon: 0.10 },
         robeStyle: 'long', ribbon: '#B0BEC5',
         weapon: 'fan',
         // 演义：「面如冠玉，头戴纶巾，身披鹤氅，飘飘然有神仙之概」——眉清目秀、从容淡定
@@ -101,11 +119,16 @@ const LOOKS = {
         // 乌合之众：粗鄙方脸、浓眉浊眼
         face: { shape: 'square', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.44 },
         weapon: 'dao', steel: '#C7CCD1',
+        // 站姿：前倾持刀、微含胸——乌合之众的警惕
+        stance: { lean: 0.06, headTilt: -0.02, armB: [1.34, 0.34], armF: [1.22, 0.30], legB: [1.64, -0.04], legF: [1.58, -0.06], weapon: -0.02 },
         stats: { hp: 40, atk: 9, spd: 62, reach: 1.0 }
     },
     archer: {
         name: '黄巾弓手',
-        build: 0.95, skin: '#DFAE83', skinDark: '#B98A5E',
+        build: 0.95,
+        // 体形：瘦削敏捷的弓手——窄肩细身
+        body: { shoulderW: 0.92, torsoW: 0.92, hipW: 0.94, armW: 0.92, legW: 0.92, headR: 0.98 },
+        skin: '#DFAE83', skinDark: '#B98A5E',
         robe: '#A1887F', robeDark: '#6D4C41', robeLight: '#BCAAA4',
         skirt: '#795548', sash: '#FDD835', trim: '#FDD835',
         pants: '#5D4037', boot: '#3E2723',
@@ -114,11 +137,16 @@ const LOOKS = {
         // 弓手：机敏瘦削，眉眼细长
         face: { shape: 'oval', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.30 },
         weapon: 'bow', wood: '#6D4C33',
+        // 站姿：轻盈前倾、身体侧转——弓手的机敏
+        stance: { lean: 0.07, headTilt: -0.03, armB: [1.30, 0.36], armF: [1.12, 0.28], legB: [1.66, -0.03], legF: [1.54, -0.05], weapon: -0.08 },
         stats: { hp: 32, atk: 11, spd: 70, reach: 0 }
     },
     shield: {
         name: '刀盾兵',
-        build: 1.08, skin: '#D9A066', skinDark: '#B07E49',
+        build: 1.08,
+        // 体形：敦实粗壮的盾兵——比同阶步兵明显更宽厚
+        body: { shoulderW: 1.24, torsoW: 1.20, hipW: 1.22, armW: 1.20, legW: 1.18, headR: 1.06 },
+        skin: '#D9A066', skinDark: '#B07E49',
         robe: '#795548', robeDark: '#4E342E', robeLight: '#8D6E63',
         skirt: '#5D4037', sash: '#FDD835', trim: '#C9A227',
         armor: '#8D6E63', armorLight: '#A1887F',
@@ -129,6 +157,8 @@ const LOOKS = {
         face: { shape: 'square', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.50 },
         weapon: 'dao', steel: '#C7CCD1',
         shieldColor: '#A1887F', shieldBoss: '#C9A227',
+        // 站姿：阔步持盾、前臂前推——盾兵的稳固防御
+        stance: { lean: 0.05, headTilt: -0.01, armB: [1.28, 0.34], armF: [1.06, 0.30], legB: [1.72, -0.03], legF: [1.52, -0.05], weapon: -0.04 },
         stats: { hp: 66, atk: 12, spd: 55, reach: 0.95 }
     },
     spear: {
@@ -141,11 +171,16 @@ const LOOKS = {
         robeStyle: 'short',
         weapon: 'lance', steel: '#C7CCD1', tassel: '#FDD835', wood: '#5D4037',
         face: { shape: 'long', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.32 },
+        // 站姿：前倾刺势、重心前移——长矛兵的进攻姿态
+        stance: { lean: 0.10, headTilt: -0.04, armB: [1.24, 0.32], armF: [1.08, 0.26], legB: [1.74, -0.03], legF: [1.48, -0.05], weapon: -0.14 },
         stats: { hp: 52, atk: 14, spd: 66, reach: 1.55 }
     },
     firemage: {
         name: '黄巾术士',
-        build: 0.92, skin: '#E8BE93', skinDark: '#C29B6E',
+        build: 0.92,
+        // 体形：阴柔瘦小的术士——全场最纤细的杂兵
+        body: { shoulderW: 0.88, torsoW: 0.88, hipW: 0.92, armW: 0.88, legW: 0.90, headR: 1.00 },
+        skin: '#E8BE93', skinDark: '#C29B6E',
         robe: '#5E35B1', robeDark: '#4527A0', robeLight: '#7E57C2',
         skirt: '#512DA8', sash: '#FDD835', trim: '#FDD835',
         pants: '#4527A0', boot: '#311B92',
@@ -154,11 +189,16 @@ const LOOKS = {
         // 术士：阴鸷长脸，细眉低目
         face: { shape: 'long', brow: 'refined', eye: 'calm', ears: 'normal', jaw: 0.28 },
         weapon: 'staff', magic: '#FF7043',
+        // 站姿：驼背低首、双手微抬——术士的阴鸷施法
+        stance: { lean: 0.15, headTilt: 0.07, armB: [1.34, 0.40], armF: [1.26, 0.40], legB: [1.64, -0.04], legF: [1.56, -0.06], weapon: 0.10 },
         stats: { hp: 38, atk: 13, spd: 58, reach: 0 }
     },
     cavalry: {
         name: '黄巾铁骑',
-        build: 1.05, skin: '#DFAE83', skinDark: '#B98A5E',
+        build: 1.05,
+        // 体形：精悍的骑手——比步兵略壮，便于骑乘
+        body: { shoulderW: 1.08, torsoW: 1.04, hipW: 1.06, armW: 1.06, legW: 1.04, headR: 1.00 },
+        skin: '#DFAE83', skinDark: '#B98A5E',
         robe: '#546E7A', robeDark: '#37474F', robeLight: '#607D8B',
         skirt: '#455A64', sash: '#FDD835', trim: '#FDD835',
         armor: '#78909C', armorLight: '#90A4AE',
@@ -169,11 +209,16 @@ const LOOKS = {
         face: { shape: 'square', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.42 },
         weapon: 'lance', steel: '#C7CCD1', tassel: '#FDD835', wood: '#5D4037',
         mount: { body: '#5D4037', mane: '#2B1B12', hoof: '#263238', saddle: '#8B0000' },
+        // 站姿：端正持枪、身姿挺括——骑手在马背上的直立
+        stance: { lean: 0.02, headTilt: -0.02, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.60, -0.04], legF: [1.62, -0.04], weapon: 0.02 },
         stats: { hp: 58, atk: 17, spd: 92, reach: 1.5 }
     },
     elite: {
         name: '黄巾精锐',
-        build: 1.08, skin: '#D9A066', skinDark: '#B07E49',
+        build: 1.08,
+        // 体形：久经战阵的精锐——比杂兵壮，但不及铁甲
+        body: { shoulderW: 1.16, torsoW: 1.14, hipW: 1.16, armW: 1.14, legW: 1.14, headR: 1.04 },
+        skin: '#D9A066', skinDark: '#B07E49',
         robe: '#37474F', robeDark: '#1B2429', robeLight: '#455A64',
         skirt: '#263238', sash: '#C9A227', trim: '#C9A227',
         armor: '#8D6E63', armorLight: '#A1887F',
@@ -183,11 +228,16 @@ const LOOKS = {
         // 精锐：久经战阵，长脸浓眉、目光如炬
         face: { shape: 'long', brow: 'bushy', eye: 'sharp', ears: 'normal', jaw: 0.36 },
         weapon: 'dao', steel: '#D6DBE0',
+        // 站姿：前倾蓄势、前手压刀——久经战阵的精锐
+        stance: { lean: 0.08, headTilt: -0.03, armB: [1.30, 0.32], armF: [1.10, 0.28], legB: [1.70, -0.03], legF: [1.54, -0.05], weapon: -0.06 },
         stats: { hp: 78, atk: 16, spd: 78, reach: 1.1 }
     },
     ironelite: {
         name: '铁甲精锐',
-        build: 1.18, skin: '#D9A066', skinDark: '#B07E49',
+        build: 1.18,
+        // 体形：全副铁甲的重装——全场最厚重的杂兵
+        body: { shoulderW: 1.42, torsoW: 1.34, hipW: 1.30, armW: 1.30, legW: 1.28, headR: 1.10 },
+        skin: '#D9A066', skinDark: '#B07E49',
         robe: '#455A64', robeDark: '#263238', robeLight: '#546E7A',
         skirt: '#37474F', sash: '#B71C1C', trim: '#C9A227',
         armor: '#90A4AE', armorLight: '#B0BEC5',
@@ -197,27 +247,36 @@ const LOOKS = {
         weapon: 'axe', steel: '#D6DBE0',
         face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.48 },
         superArmor: true,
+        // 站姿：沉稳阔立、双臂沉垂——全副铁甲的重压
+        stance: { lean: 0.06, headTilt: 0.0, armB: [1.32, 0.34], armF: [1.16, 0.34], legB: [1.74, -0.02], legF: [1.50, -0.02], weapon: -0.04 },
         stats: { hp: 105, atk: 20, spd: 62, reach: 1.25 }
     },
 
     /* ===================== BOSS ===================== */
     zhangjue: {
         name: '张角', title: '天公将军',
-        build: 1.12, skin: '#E8BE93', skinDark: '#C29B6E',
+        build: 1.12,
+        // 体形：教主威仪——宽袍下的端正骨架，不靠肌肉靠气度
+        body: { shoulderW: 1.04, torsoW: 1.06, hipW: 1.00, armW: 1.00, legW: 1.00, headR: 1.02 }, skin: '#E8BE93', skinDark: '#C29B6E',
         robe: '#F9A825', robeDark: '#C17900', robeLight: '#FFD54F',
         skirt: '#E65100', sash: '#4E342E', trim: '#FFD700',
         pants: '#8D6E63', boot: '#4E342E',
-        head: 'band', hair: '#2B1B12', bandColor: '#FFD700',
+        head: 'cult', hair: '#2B1B12', band: '#FFD700', bandColor: '#FFD700',
         robeStyle: 'long', cape: '#E65100', ribbon: '#FFD700',
         // 天公将军：教主威仪，长脸卧蚕眉、丹凤眼，与其弟张宝的武夫相区分
         face: { shape: 'long', brow: 'silkworm', eye: 'phoenix', ears: 'normal', jaw: 0.32 },
         weapon: 'staff', magic: '#7E57C2',
-        boss: true,
+        boss: true, bossScale: 1.62,
+        // 站姿：身姿端立、微仰头、长杖斜持——教主的从容威仪
+        stance: { lean: 0.04, headTilt: -0.05, armB: [1.46, 0.36], armF: [1.12, 0.28], legB: [1.66, -0.03], legF: [1.56, -0.05], weapon: 0.08 },
         stats: { hp: 420, atk: 20, spd: 78, reach: 1.3 }
     },
     zhangbao: {
         name: '张宝', title: '地公将军',
-        build: 1.15, skin: '#D9A066', skinDark: '#B07E49',
+        build: 1.15,
+        // 体形：张角之弟，纯武夫——比张角宽厚得多，靠蛮力不靠气度
+        body: { shoulderW: 1.30, torsoW: 1.24, hipW: 1.24, armW: 1.24, legW: 1.22, headR: 1.08 },
+        skin: '#D9A066', skinDark: '#B07E49',
         robe: '#6A1B9A', robeDark: '#4A148C', robeLight: '#8E24AA',
         skirt: '#4A148C', sash: '#FFD700', trim: '#FFD700',
         armor: '#7B1FA2', armorLight: '#9C27B0',
@@ -228,12 +287,17 @@ const LOOKS = {
         weapon: 'ji', steel: '#D6DBE0', wood: '#3E2723', tassel: '#D32F2F',
         // 地公将军：张角之弟，凶悍武夫，浓眉环眼
         face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.44 },
-        boss: true,
+        boss: true, bossScale: 1.74,
+        // 站姿：阔步前倾、双臂张开持戟——地公将军的蛮力
+        stance: { lean: 0.10, headTilt: -0.02, armB: [1.24, 0.30], armF: [1.14, 0.28], legB: [1.76, -0.03], legF: [1.46, -0.05], weapon: -0.10 },
         stats: { hp: 560, atk: 24, spd: 86, reach: 1.5 }
     },
     tianmo: {
         name: '天魔张角', title: '黄天之主',
-        build: 1.28, skin: '#B39DDB', skinDark: '#7E57C2',
+        build: 1.28,
+        // 体形：非人之躯——魁梧而怪异，比常人明显更粗更阔
+        body: { shoulderW: 1.30, torsoW: 1.26, hipW: 1.28, armW: 1.26, legW: 1.24, headR: 1.12 },
+        skin: '#B39DDB', skinDark: '#7E57C2',
         robe: '#311B92', robeDark: '#1A237E', robeLight: '#5E35B1',
         skirt: '#1A237E', sash: '#FFD700', trim: '#FFD700',
         armor: '#4527A0', armorLight: '#7E57C2',
@@ -243,7 +307,9 @@ const LOOKS = {
         // 天魔：非人之相，方阔獠面、怒目圆睁
         face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.52 },
         weapon: 'staff', magic: '#18FFFF',
-        boss: true,
+        boss: true, bossScale: 1.94,
+        // 站姿：阔步低首、双臂沉张——非人之躯的压迫感
+        stance: { lean: 0.09, headTilt: 0.03, armB: [1.30, 0.34], armF: [1.18, 0.34], legB: [1.74, -0.03], legF: [1.48, -0.05], weapon: -0.08 },
         stats: { hp: 760, atk: 28, spd: 96, reach: 1.5 }
     }
 };

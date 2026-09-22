@@ -166,7 +166,7 @@ class Actor {
         const t = this.animT;
 
         switch (this.state) {
-            case 'idle': p = Fig.idle(t); break;
+            case 'idle': p = Fig.idle(t, this.look); break;
             case 'walk': p = Fig.walk(t, 9.5); break;
             case 'run': p = Fig.run(t); break;
             case 'jump':
@@ -180,11 +180,11 @@ class Actor {
             case 'cast': p = Fig.cast(t); break;
             case 'cheer': p = Fig.cheer(t); break;
             case 'charge': p = Fig.charge(t); break;
-            default: p = Fig.idle(t);
+            default: p = Fig.idle(t, this.look);
         }
 
         if (this.atkDef) {
-            p = Fig.sample(this.atkDef.frames, this.stateT);
+            p = Fig.atkSample(this.look, this.atkDef.frames, this.stateT);
             snap = true;
         }
 
@@ -312,7 +312,10 @@ class Actor {
         }
 
         /* ---- 命中 ---- */
-        let dmg = Math.max(1, Math.round(h.dmg * (this.isBoss ? 1 : 1)));
+        // 非格挡受击必须复位完美格挡标记：否则上一次完美格挡会让此后每一次普通
+        // 受击都被 player.takeHit 误判为完美格挡（计数虚增、连击永不中断）
+        this.lastBlockPerfect = false;
+        let dmg = Math.max(1, Math.round(h.dmg));
         this.hp -= dmg;
         this.flash = 1;
         this.hitCount++;
@@ -323,11 +326,16 @@ class Actor {
 
         fx.damage(sx, cy - 16, dmg, h.heavy ? 'heavy' : 'normal');
         fx.hitSpark(sx + h.dir * 8, cy, h.dir, h.heavy ? 1.7 : 0.9);
+        const wpn = (h.src && h.src.look) ? h.src.look.weapon : 'dao';
+        const kind = (wpn === 'guandao' || wpn === 'axe') ? 'h'
+            : (wpn === 'spear' || wpn === 'lance' || wpn === 'ji') ? 't'
+            : (wpn === 'fan' || wpn === 'staff') ? 'c' : 'h';
         if (h.heavy) {
-            fx.slash(sx, cy, 1.05 * this.ds, h.dir, 'h', '#FFE9A8');
-            fx.addShake(6.5);
+            fx.slash(sx, cy, 1.05 * this.ds, h.dir, kind, '#FFE9A8');
+            fx.addShake(kind === 'h' ? 9 : 6.5);
             fx.stop(TUNE.hitStopHeavy);
         } else {
+            fx.slash(sx, cy, 0.72 * this.ds, h.dir, kind, '#FFD166');
             fx.addShake(2.6);
             fx.stop(TUNE.hitStop);
         }
@@ -386,7 +394,7 @@ class Actor {
      * ============================================================ */
     drawShadow(ctx, cam) {
         if (this.remove) return;
-        const k = PPM * this.ds;
+        const k = PPM * this.ds * (this.drawScale || 1);
         const h = U.clamp(this.y / 2.4, 0, 1);
         const w = 0.40 * k * (1 - h * 0.42);
         const a = 0.32 * (1 - h * 0.62) * this.shadowAlpha;
@@ -395,7 +403,7 @@ class Actor {
 
     draw(ctx, cam) {
         if (this.remove) return;
-        const k = PPM * this.ds;
+        const k = PPM * this.ds * (this.drawScale || 1);
         const sx = this.sx(cam), sy = this.sy(cam);
         const o = {
             time: this.time,
@@ -417,7 +425,7 @@ class Actor {
             ctx.translate(0, -0.52);
         }
 
-        const s = Fig.solve(this.pose);
+        const s = Fig.solve(this.pose, this.look.body);
         Fig.draw(ctx, this.look, s, o);
         if (this.look.shieldColor) Fig.drawShield(ctx, this.look, s, o);
         ctx.restore();
@@ -448,7 +456,8 @@ class Actor {
         const sx = this.sx(cam), cy = this.cy(cam);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = 0.30 + 0.34 * Math.sin(this.time * 34);
+        // 0.30 + 0.34*sin() 会短暂落到负值，被浏览器钳成 0 造成 1 帧闪烁
+        ctx.globalAlpha = Math.max(0.03, 0.30 + 0.34 * Math.sin(this.time * 34));
         ctx.fillStyle = a > 0.6 ? '#FF5A3C' : '#FFC94D';
         ctx.beginPath();
         ctx.arc(sx + this.facing * 16 * k, cy - 6 * k, (7 + a * 8) * k, 0, TAU);

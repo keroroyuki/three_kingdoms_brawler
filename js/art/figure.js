@@ -6,24 +6,37 @@
 'use strict';
 
 /** 骨骼常量（单位：米） */
+// 骨骼参数（单位空间，1 单位 = 62px）
+// 头身比：头径 0.30，总高 2.09 → 约 6.9 头身，对齐三国战纪的武将比例
+// （旧值 0.37 头径 / 1.93 总高 ≈ 4.6 头，头显得过大）
 const SK = {
-    chestY: -0.46,
-    neckY: -0.655,
-    headY: -0.865,
-    headR: 0.185,
-    shoulderX: 0.145,
-    shoulderY: -0.60,
-    hipX: 0.105,
+    chestY: -0.50,
+    neckY: -0.72,
+    headY: -0.945,
+    headR: 0.150,
+    shoulderX: 0.195,
+    shoulderY: -0.68,
+    hipX: 0.118,
     hipY: 0.00,
-    upperArm: 0.30,
-    foreArm: 0.29,
-    thigh: 0.44,
-    shin: 0.44
+    upperArm: 0.31,
+    foreArm: 0.30,
+    thigh: 0.50,
+    shin: 0.50
+};
+
+/* 默认体态：体宽倍率。
+ * 骨骼长度固定不变——若按体高缩放骨骼，脚底会越过 FOOT_OFF 锚点陷入地面。
+ * 因此角色间的体型差异只体现在「宽窄与头围」，高矮由 build 与 drawScale 控制。
+ * shoulderW 肩宽 / torsoW 躯干 / hipW 胯宽 / armW 臂粗 / legW 腿粗 / headR 头围 */
+const BODY_DEFAULT = {
+    shoulderW: 1.0, torsoW: 1.0, hipW: 1.0,
+    armW: 1.0, legW: 1.0, headR: 1.0
 };
 
 const Fig = {
     PX: 62,              // 1 单位对应的像素
     OUTLINE: '#241811',  // 墨线色
+    BODY: BODY_DEFAULT,
 
     /* ========================================================
      * 姿态：基础模板
@@ -70,18 +83,40 @@ const Fig = {
         return Fig.blend(last[1], last[1], 0);
     },
 
+    /** 攻击取样：首尾帧替换为角色站姿，实现 站姿→攻击→站姿 的平滑过渡。
+     *  直接 sample 会用默认 idle 姿态起收，与角色自定义站姿不匹配会造成可见跳变 */
+    atkSample(look, frames, t) {
+        if (!frames || frames.length < 2) return Fig.sample(frames, t);
+        const stance = Fig.idle(0, look);
+        const mod = [[0.00, stance]];
+        for (let i = 1; i < frames.length - 1; i++) mod.push(frames[i]);
+        mod.push([frames[frames.length - 1][0], stance]);
+        return Fig.sample(mod, t);
+    },
+
     /* ========================================================
      * 姿态库
      * ======================================================== */
-    idle(t) {
+    /** 待机姿态：按角色 stance 生成，各角色站姿不同。
+     *  stance 字段：lean 上身前倾 / headTilt 头倾(负=仰) / armB,armF [上臂绝对角,肘弯]
+     *  / legB,legF [大腿绝对角,膝弯] / weapon 武器附加角
+     *  角度约定：越小越前（朝脸），越大越后；约 1.60 ≈ 垂直向下 */
+    idle(t, look) {
         const b = Math.sin(t * 2.1);
+        const st = (look && look.stance) || {};
+        const aB = st.armB || [1.36, 0.34];
+        const aF = st.armF || [1.14, 0.32];
+        const lB = st.legB || [1.58, -0.04];
+        const lF = st.legF || [1.66, -0.06];
         return Fig.base({
             bodyY: b * 0.014,
-            lean: 0.04 + b * 0.02,
-            headTilt: -0.03 - b * 0.03,
-            armB: [1.36 + b * 0.06, 0.34],
-            armF: [1.14 - b * 0.05, 0.32],
-            weapon: b * 0.06
+            lean: (st.lean != null ? st.lean : 0.04) + b * 0.02,
+            headTilt: (st.headTilt != null ? st.headTilt : -0.03) - b * 0.03,
+            armB: [aB[0] + b * 0.06, aB[1]],
+            armF: [aF[0] - b * 0.05, aF[1]],
+            legB: lB,
+            legF: lF,
+            weapon: (st.weapon != null ? st.weapon : 0) + b * 0.06
         });
     },
 
@@ -256,25 +291,59 @@ const Fig = {
     ],
 
     /* ========================================================
+     * 武器类型差异化重击帧
+     * 轻攻击(atk1/atk2)仍用通用帧，重击(atk3)按兵器类型分化
+     * ======================================================== */
+    /** 大刀/重兵器：大弧度横扫——蓄力后撤更深，打击前压更猛，下盘驱动更大 */
+    atkSweepHeavy: [
+        [0.00, { bodyY: 0, lean: 0.05, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.58, -0.04], legF: [1.66, -0.06], weapon: 0 }],
+        [0.16, { bodyY: 0.12, lean: -0.30, armB: [0.80, 0.85], armF: [0.50, 1.10], legB: [1.26, 0.50], legF: [1.52, 0.40], weapon: -1.50 }],
+        [0.30, { bodyY: -0.06, lean: 0.40, armB: [1.20, 0.25], armF: [1.30, -0.10], legB: [1.58, 0.12], legF: [1.80, 0.30], weapon: 0.60 }],
+        [0.42, { bodyY: -0.02, lean: 0.20, armB: [1.35, 0.30], armF: [1.20, 0.10], legB: [1.60, 0.10], legF: [1.76, 0.18], weapon: 0.40 }],
+        [0.62, { bodyY: 0, lean: 0.05, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.58, -0.04], legF: [1.66, -0.06], weapon: 0.06 }]
+    ],
+    /** 长兵器：突刺前冲——重心前移更猛，前腿驱动更大，武器伸直前刺 */
+    atkThrustHeavy: [
+        [0.00, { bodyY: 0, lean: 0.05, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.58, -0.04], legF: [1.66, -0.06], weapon: 0 }],
+        [0.16, { bodyY: 0.08, lean: -0.12, armB: [1.40, 0.34], armF: [1.10, 0.50], legB: [1.40, 0.40], legF: [1.60, 0.35], weapon: -0.30 }],
+        [0.30, { bodyY: -0.06, lean: 0.38, armB: [1.20, 0.15], armF: [0.95, 0.00], legB: [1.28, 0.15], legF: [1.88, 0.30], weapon: 0.80 }],
+        [0.42, { bodyY: -0.02, lean: 0.22, armB: [1.30, 0.20], armF: [1.05, 0.05], legB: [1.35, 0.12], legF: [1.80, 0.20], weapon: 0.60 }],
+        [0.62, { bodyY: 0, lean: 0.05, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.58, -0.04], legF: [1.66, -0.06], weapon: 0.06 }]
+    ],
+    /** 法器/扇：蓄力举扇前推——身体位移小，动作收敛，武器前指推气 */
+    atkCastHeavy: [
+        [0.00, { bodyY: 0, lean: 0.05, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.58, -0.04], legF: [1.66, -0.06], weapon: 0 }],
+        [0.16, { bodyY: 0.02, lean: -0.10, armB: [1.52, 0.32], armF: [0.65, 0.75], legB: [1.50, 0.12], legF: [1.72, 0.10], weapon: -0.80 }],
+        [0.30, { bodyY: 0.01, lean: 0.20, armB: [1.35, 0.28], armF: [0.85, 0.15], legB: [1.45, 0.15], legF: [1.78, 0.14], weapon: 0.45 }],
+        [0.42, { bodyY: 0.01, lean: 0.14, armB: [1.38, 0.30], armF: [0.95, 0.18], legB: [1.48, 0.12], legF: [1.74, 0.12], weapon: 0.30 }],
+        [0.62, { bodyY: 0, lean: 0.05, armB: [1.36, 0.34], armF: [1.14, 0.32], legB: [1.58, -0.04], legF: [1.66, -0.06], weapon: 0.06 }]
+    ],
+
+    /* ========================================================
      * 骨骼求解
      * ======================================================== */
-    solve(p) {
+    solve(p, bd) {
         // 兜底：任何字段缺失都退回基础姿态，绝不让渲染循环因畸形 pose 崩溃
         if (!p || !p.armB || !p.armF || !p.legB || !p.legF) p = Fig.base(p || {});
+        bd = bd || BODY_DEFAULT;
         const lean = p.lean || 0;
         const c = Math.cos(lean), s = Math.sin(lean);
         const rot = (x, y) => ({ x: x * c - y * s, y: x * s + y * c });
         const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
         const on = (o, a, l) => ({ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l });
 
+        // 肩/胯外扩量随体态变化（张飞 1.4x 肩宽 → 明显阔肩），骨骼长度不受影响
+        const shoulderX = SK.shoulderX * bd.shoulderW;
+        const hipX = SK.hipX * bd.hipW;
+
         const pelvis = { x: 0, y: p.bodyY || 0 };
         const chest = add(pelvis, rot(0, SK.chestY));
         const neck = add(pelvis, rot(0, SK.neckY));
         const head = add(pelvis, rot(0, SK.headY));
-        const shB = add(pelvis, rot(-SK.shoulderX, SK.shoulderY));
-        const shF = add(pelvis, rot(SK.shoulderX, SK.shoulderY));
-        const hipB = add(pelvis, rot(-SK.hipX, SK.hipY));
-        const hipF = add(pelvis, rot(SK.hipX, SK.hipY));
+        const shB = add(pelvis, rot(-shoulderX, SK.shoulderY));
+        const shF = add(pelvis, rot(shoulderX, SK.shoulderY));
+        const hipB = add(pelvis, rot(-hipX, SK.hipY));
+        const hipF = add(pelvis, rot(hipX, SK.hipY));
 
         const elB = on(shB, p.armB[0], SK.upperArm);
         const hdB = on(elB, p.armB[0] + p.armB[1], SK.foreArm);
@@ -303,6 +372,8 @@ const Fig = {
     draw(ctx, look, s, o) {
         o = o || {};
         const B = look.build || 1;
+        const bd = look.body || BODY_DEFAULT;
+        const T = bd.torsoW, A = bd.armW, L = bd.legW;   // 体宽倍率
         const time = o.time || 0;
         const flash = o.flash || 0;
         const OUT = Fig.OUTLINE;
@@ -327,8 +398,8 @@ const Fig = {
             const sway = Math.sin(time * 3.4) * 0.05 + (o.capeBoost || 0);
             ctx.beginPath();
             ctx.moveTo(s.shB.x - 0.02, s.shB.y);
-            ctx.quadraticCurveTo(-0.30 * B, s.chest.y + 0.10, -0.34 * B + sway, s.pelvis.y + 0.30);
-            ctx.quadraticCurveTo(-0.16 * B, s.pelvis.y + 0.42, -0.20 * B + sway * 1.4, s.pelvis.y + 0.62);
+            ctx.quadraticCurveTo(-0.30 * B * T, s.chest.y + 0.10, -0.34 * B * T + sway, s.pelvis.y + 0.30);
+            ctx.quadraticCurveTo(-0.16 * B * T, s.pelvis.y + 0.42, -0.20 * B * T + sway * 1.4, s.pelvis.y + 0.62);
             ctx.lineTo(0.02, s.pelvis.y + 0.52);
             ctx.lineTo(0.02, s.shB.y - 0.05);
             ctx.closePath();
@@ -336,21 +407,21 @@ const Fig = {
         }
 
         /* ---- 后腿 / 后臂（压暗，制造层次） ---- */
-        limb(s.hipB, s.knB, 0.165 * B, 0.135 * B, look.pants ? U.shade(look.pants, -0.25) : robeD);
-        limb(s.knB, s.ftB, 0.135 * B, 0.105 * B, U.shade(look.boot || robeD, -0.2));
-        Fig._foot(ctx, s.ftB, s.aLegB, look.boot || '#3E2723', B, OUT, OLW);
+        limb(s.hipB, s.knB, 0.165 * B * L, 0.135 * B * L, look.pants ? U.shade(look.pants, -0.25) : robeD);
+        limb(s.knB, s.ftB, 0.135 * B * L, 0.105 * B * L, U.shade(look.boot || robeD, -0.2));
+        Fig._foot(ctx, s.ftB, s.aLegB, look.boot || '#3E2723', B * L, OUT, OLW);
 
-        limb(s.shB, s.elB, 0.115 * B, 0.098 * B, U.shade(robe, -0.12));
-        limb(s.elB, s.hdB, 0.098 * B, 0.082 * B, U.shade(skin, -0.18));
+        limb(s.shB, s.elB, 0.115 * B * A, 0.098 * B * A, U.shade(robe, -0.12));
+        limb(s.elB, s.hdB, 0.098 * B * A, 0.082 * B * A, U.shade(skin, -0.18));
 
         /* ---- 前腿 ---- */
-        limb(s.hipF, s.knF, 0.175 * B, 0.140 * B, look.pants || robe);
-        limb(s.knF, s.ftF, 0.140 * B, 0.110 * B, look.boot || '#4E342E');
-        Fig._foot(ctx, s.ftF, s.aLegF, look.boot || '#4E342E', B, OUT, OLW);
+        limb(s.hipF, s.knF, 0.175 * B * L, 0.140 * B * L, look.pants || robe);
+        limb(s.knF, s.ftF, 0.140 * B * L, 0.110 * B * L, look.boot || '#4E342E');
+        Fig._foot(ctx, s.ftF, s.aLegF, look.boot || '#4E342E', B * L, OUT, OLW);
 
         /* ---- 躯干 ---- */
-        const tw = 0.365 * B;
-        U.capsule(ctx, s.chest.x, s.chest.y + 0.02, s.pelvis.x, s.pelvis.y - 0.02, tw, 0.29 * B);
+        const tw = 0.365 * B * T;
+        U.capsule(ctx, s.chest.x, s.chest.y + 0.02, s.pelvis.x, s.pelvis.y - 0.02, tw, 0.29 * B * T);
         shape(robe);
 
         // 衣襟（V 领）
@@ -363,31 +434,31 @@ const Fig = {
         ctx.fillStyle = robeL; ctx.fill();
 
         // 腰带
-        U.capsule(ctx, s.pelvis.x - 0.14 * B, s.pelvis.y - 0.10, s.pelvis.x + 0.15 * B, s.pelvis.y - 0.115, 0.115 * B, 0.115 * B);
+        U.capsule(ctx, s.pelvis.x - 0.14 * B * T, s.pelvis.y - 0.10, s.pelvis.x + 0.15 * B * T, s.pelvis.y - 0.115, 0.115 * B * T, 0.115 * B * T);
         shape(look.sash || '#8B0000');
 
         // 铠甲（胸甲 + 肩甲）
         if (look.armor) {
             ctx.beginPath();
-            ctx.moveTo(s.chest.x - 0.19 * B, s.chest.y - 0.16);
-            ctx.quadraticCurveTo(s.chest.x + 0.02 * B, s.chest.y - 0.24, s.chest.x + 0.20 * B, s.chest.y - 0.14);
-            ctx.lineTo(s.chest.x + 0.17 * B, s.chest.y + 0.10);
-            ctx.quadraticCurveTo(s.chest.x, s.chest.y + 0.17, s.chest.x - 0.16 * B, s.chest.y + 0.09);
+            ctx.moveTo(s.chest.x - 0.19 * B * T, s.chest.y - 0.16);
+            ctx.quadraticCurveTo(s.chest.x + 0.02 * B, s.chest.y - 0.24, s.chest.x + 0.20 * B * T, s.chest.y - 0.14);
+            ctx.lineTo(s.chest.x + 0.17 * B * T, s.chest.y + 0.10);
+            ctx.quadraticCurveTo(s.chest.x, s.chest.y + 0.17, s.chest.x - 0.16 * B * T, s.chest.y + 0.09);
             ctx.closePath();
             shape(look.armor);
             // 甲片高光
             ctx.beginPath();
-            ctx.moveTo(s.chest.x - 0.13 * B, s.chest.y - 0.10);
-            ctx.quadraticCurveTo(s.chest.x + 0.02 * B, s.chest.y - 0.16, s.chest.x + 0.14 * B, s.chest.y - 0.08);
-            ctx.lineTo(s.chest.x + 0.12 * B, s.chest.y - 0.02);
-            ctx.quadraticCurveTo(s.chest.x, s.chest.y - 0.08, s.chest.x - 0.12 * B, s.chest.y - 0.02);
+            ctx.moveTo(s.chest.x - 0.13 * B * T, s.chest.y - 0.10);
+            ctx.quadraticCurveTo(s.chest.x + 0.02 * B, s.chest.y - 0.16, s.chest.x + 0.14 * B * T, s.chest.y - 0.08);
+            ctx.lineTo(s.chest.x + 0.12 * B * T, s.chest.y - 0.02);
+            ctx.quadraticCurveTo(s.chest.x, s.chest.y - 0.08, s.chest.x - 0.12 * B * T, s.chest.y - 0.02);
             ctx.closePath();
             ctx.fillStyle = U.rgba('#FFFFFF', 0.18); ctx.fill();
 
             // 肩甲
             [[s.shF, 1], [s.shB, -1]].forEach(([sh, dir]) => {
                 ctx.beginPath();
-                ctx.ellipse(sh.x, sh.y - 0.02, 0.115 * B, 0.095 * B, dir * 0.3, 0, TAU);
+                ctx.ellipse(sh.x, sh.y - 0.02, 0.115 * B * A, 0.095 * B * A, dir * 0.3, 0, TAU);
                 shape(look.armorLight || U.shade(look.armor, 0.2));
             });
         }
@@ -412,8 +483,8 @@ const Fig = {
         Fig._head(ctx, look, s, B, time, o, shape, skin, skinD);
 
         /* ---- 前臂 ---- */
-        limb(s.shF, s.elF, 0.122 * B, 0.104 * B, robe);
-        limb(s.elF, s.hdF, 0.104 * B, 0.088 * B, skin);
+        limb(s.shF, s.elF, 0.122 * B * A, 0.104 * B * A, robe);
+        limb(s.elF, s.hdF, 0.104 * B * A, 0.088 * B * A, skin);
 
         /* ---- 武器（跟随前手） ---- */
         if (look.weapon) {
@@ -458,11 +529,12 @@ const Fig = {
     },
 
     _skirt(ctx, look, s, B, time, o, shape) {
+        const bd = look.body || BODY_DEFAULT;
         const style = look.robeStyle || 'short';
         const wy = s.pelvis.y - 0.10;
         const len = style === 'long' ? 0.72 : (style === 'mid' ? 0.50 : 0.26);
-        const wTop = 0.20 * B;
-        const wBot = (style === 'long' ? 0.34 : style === 'mid' ? 0.30 : 0.26) * B;
+        const wTop = 0.20 * B * bd.torsoW;
+        const wBot = (style === 'long' ? 0.34 : style === 'mid' ? 0.30 : 0.26) * B * bd.torsoW;
         const hy = s.pelvis.y - 0.10 + len;
         const sway = Math.sin(time * 3.1 + (o.phase || 0)) * (style === 'long' ? 0.035 : 0.02);
 
@@ -561,7 +633,8 @@ const Fig = {
     },
 
     _head(ctx, look, s, B, time, o, shape, skin, skinD) {
-        const R = SK.headR * B;
+        const bd = look.body || BODY_DEFAULT;
+        const R = SK.headR * B * bd.headR;
         const F = look.face || {};
         const P = Fig.FACE_SHAPES[F.shape] || Fig.FACE_SHAPES.oval;
         const hx = s.head.x, hy = s.head.y;
@@ -726,7 +799,7 @@ const Fig = {
             ctx.stroke();
         }
 
-        Fig._facialHair(ctx, look, s, B, shape);
+        Fig._facialHair(ctx, look, s, B, shape, time);
     },
 
     _headgear(ctx, look, s, B, time, shape) {
@@ -758,6 +831,43 @@ const Fig = {
                 ctx.lineTo(hx - 0.038, hy - 0.130);
                 ctx.closePath();
                 shape(band);
+                break;
+            }
+            case 'cult': { // 张角：黄巾天公教主冠——高耸符冠 + 两侧翘角
+                // 冠体（上窄下宽的梯形高冠）
+                ctx.beginPath();
+                ctx.moveTo(hx - R * 1.05, hy - 0.052);
+                ctx.lineTo(hx - R * 0.64, hy - 0.278);
+                ctx.lineTo(hx + R * 0.64, hy - 0.278);
+                ctx.lineTo(hx + R * 1.05, hy - 0.052);
+                ctx.closePath();
+                shape(band);
+                // 冠顶尖
+                ctx.beginPath();
+                ctx.moveTo(hx - R * 0.64, hy - 0.278);
+                ctx.lineTo(hx, hy - 0.352);
+                ctx.lineTo(hx + R * 0.64, hy - 0.278);
+                ctx.closePath();
+                shape(look.armorLight || band);
+                // 两侧翘角
+                ctx.beginPath();
+                ctx.moveTo(hx - R * 0.64, hy - 0.264);
+                ctx.lineTo(hx - R * 1.04, hy - 0.336);
+                ctx.lineTo(hx - R * 0.50, hy - 0.268);
+                ctx.closePath(); shape(look.armorLight || band);
+                ctx.beginPath();
+                ctx.moveTo(hx + R * 0.64, hy - 0.264);
+                ctx.lineTo(hx + R * 1.04, hy - 0.336);
+                ctx.lineTo(hx + R * 0.50, hy - 0.268);
+                ctx.closePath(); shape(look.armorLight || band);
+                // 额带
+                ctx.beginPath();
+                ctx.moveTo(hx - R * 1.02, hy - 0.090);
+                ctx.quadraticCurveTo(hx, hy - 0.130, hx + R * 1.02, hy - 0.090);
+                ctx.lineTo(hx + R * 0.90, hy - 0.050);
+                ctx.quadraticCurveTo(hx, hy - 0.090, hx - R * 0.90, hy - 0.050);
+                ctx.closePath();
+                shape(look.robeDark || '#7A1F1C');
                 break;
             }
             case 'topknot': { // 关羽：束发 + 发髻
@@ -902,37 +1012,73 @@ const Fig = {
         }
     },
 
-    _facialHair(ctx, look, s, B, shape) {
+    _facialHair(ctx, look, s, B, shape, time) {
         const hx = s.head.x, hy = s.head.y;
+        const bd = look.body || BODY_DEFAULT;
+        const R = SK.headR * B * bd.headR;
         const m = look.beard;
         if (!m) return;
-        if (m === 'long') { // 关羽长髯
+        const bC = look.beardColor || '#231A16';
+        if (m === 'long') {
+            // 关羽美髯：浓黑长髯垂至胸前，随风微摆
+            // 演义：「长髯飘飘」——三国的标志性长须，是他唯一的体量来源
+            const t = time || 0;
+            const sway = Math.sin(t * 1.8) * R * 0.07;
             ctx.beginPath();
-            ctx.moveTo(hx - 0.055, hy + 0.055);
-            ctx.quadraticCurveTo(hx + 0.02, hy + 0.13, hx + 0.105, hy + 0.055);
-            ctx.quadraticCurveTo(hx + 0.14, hy + 0.30, hx + 0.06, hy + 0.40);
-            ctx.quadraticCurveTo(hx + 0.02, hy + 0.20, hx - 0.02, hy + 0.40);
-            ctx.quadraticCurveTo(hx - 0.09, hy + 0.28, hx - 0.055, hy + 0.055);
+            ctx.moveTo(hx - R * 0.54, hy + R * 0.22);
+            ctx.quadraticCurveTo(hx, hy + R * 0.74, hx + R * 0.60, hy + R * 0.20);
+            ctx.quadraticCurveTo(hx + R * 0.82 + sway, hy + R * 1.60, hx + R * 0.42 + sway, hy + R * 3.00);
+            ctx.quadraticCurveTo(hx + R * 0.16 + sway, hy + R * 3.42, hx - R * 0.08 + sway * 0.6, hy + R * 3.08);
+            ctx.quadraticCurveTo(hx - R * 0.46, hy + R * 1.72, hx - R * 0.54, hy + R * 0.22);
             ctx.closePath();
-            ctx.fillStyle = look.beardColor || '#231A16'; ctx.fill();
-        } else if (m === 'stubble') { // 张飞络腮
+            ctx.fillStyle = bC; ctx.fill();
+            ctx.lineWidth = 0.018; ctx.strokeStyle = Fig.OUTLINE; ctx.stroke();
+            // 髯缕：数道顺向纹理，让长髯有层次而非一坨墨块
+            ctx.strokeStyle = U.rgba('#000000', 0.30); ctx.lineWidth = 0.0075;
+            for (let i = 0; i < 6; i++) {
+                const k = i / 5;
+                ctx.beginPath();
+                ctx.moveTo(hx - R * 0.40 + k * R * 0.72, hy + R * 0.46);
+                ctx.quadraticCurveTo(hx - R * 0.28 + k * R * 0.58 + sway * 0.6, hy + R * 1.65,
+                    hx - R * 0.24 + k * R * 0.46 + sway, hy + R * 2.92);
+                ctx.stroke();
+            }
+            // 受光：右侧一缕高光，给髯体体积感
             ctx.beginPath();
-            ctx.ellipse(hx + 0.02, hy + 0.105, 0.105, 0.072, 0, 0, TAU);
-            ctx.fillStyle = U.rgba(look.beardColor || '#231A16', 0.85); ctx.fill();
+            ctx.ellipse(hx + R * 0.24 + sway * 0.5, hy + R * 1.45, R * 0.18, R * 0.78, 0.12, 0, TAU);
+            ctx.fillStyle = U.rgba('#FFFFFF', 0.08); ctx.fill();
+        } else if (m === 'stubble') {
+            // 张飞络腮胡：豹头下的浓密满髯，须根覆腮
             ctx.beginPath();
-            ctx.moveTo(hx + 0.02, hy + 0.055);
-            ctx.quadraticCurveTo(hx + 0.075, hy + 0.09, hx + 0.11, hy + 0.045);
-            ctx.quadraticCurveTo(hx + 0.075, hy + 0.075, hx + 0.02, hy + 0.055);
+            ctx.moveTo(hx - R * 0.50, hy + R * 0.16);
+            ctx.quadraticCurveTo(hx, hy + R * 0.60, hx + R * 0.56, hy + R * 0.14);
+            ctx.quadraticCurveTo(hx + R * 0.68, hy + R * 0.94, hx + R * 0.16, hy + R * 1.20);
+            ctx.quadraticCurveTo(hx - R * 0.04, hy + R * 1.28, hx - R * 0.24, hy + R * 1.06);
+            ctx.quadraticCurveTo(hx - R * 0.54, hy + R * 0.80, hx - R * 0.50, hy + R * 0.16);
             ctx.closePath();
-            ctx.fillStyle = look.beardColor || '#231A16'; ctx.fill();
+            ctx.fillStyle = U.rgba(bC, 0.94); ctx.fill();
+            ctx.lineWidth = 0.016; ctx.strokeStyle = Fig.OUTLINE; ctx.stroke();
+            // 胡茬纹理
+            ctx.strokeStyle = U.rgba('#000000', 0.28); ctx.lineWidth = 0.007;
+            for (let i = 0; i < 4; i++) {
+                const k = i / 3;
+                ctx.beginPath();
+                ctx.moveTo(hx - R * 0.30 + k * R * 0.56, hy + R * 0.42);
+                ctx.quadraticCurveTo(hx - R * 0.22 + k * R * 0.44, hy + R * 0.82,
+                    hx - R * 0.14 + k * R * 0.30, hy + R * 1.06);
+                ctx.stroke();
+            }
         } else if (m === 'goatee') {
+            // 诸葛亮山羊胡：文士的精干长须，垂至颌下
             ctx.beginPath();
-            ctx.moveTo(hx + 0.030, hy + 0.10);
-            ctx.quadraticCurveTo(hx + 0.065, hy + 0.15, hx + 0.100, hy + 0.10);
-            ctx.quadraticCurveTo(hx + 0.075, hy + 0.26, hx + 0.055, hy + 0.30);
-            ctx.quadraticCurveTo(hx + 0.040, hy + 0.20, hx + 0.030, hy + 0.10);
+            ctx.moveTo(hx - R * 0.17, hy + R * 0.34);
+            ctx.quadraticCurveTo(hx, hy + R * 0.52, hx + R * 0.20, hy + R * 0.34);
+            ctx.quadraticCurveTo(hx + R * 0.27, hy + R * 1.05, hx + R * 0.08, hy + R * 1.66);
+            ctx.quadraticCurveTo(hx + R * 0.02, hy + R * 1.20, hx - R * 0.10, hy + R * 0.90);
+            ctx.quadraticCurveTo(hx - R * 0.23, hy + R * 0.56, hx - R * 0.17, hy + R * 0.34);
             ctx.closePath();
-            ctx.fillStyle = look.beardColor || '#231A16'; ctx.fill();
+            ctx.fillStyle = bC; ctx.fill();
+            ctx.lineWidth = 0.014; ctx.strokeStyle = Fig.OUTLINE; ctx.stroke();
         }
     },
 
@@ -1088,6 +1234,18 @@ const Fig = {
                 ctx.moveTo(0.80, 0.040);
                 ctx.quadraticCurveTo(0.72, 0.060, 0.66, 0.038);
                 ctx.lineWidth = 0.011; ctx.strokeStyle = gold; ctx.stroke();
+                // 龙口红缨（冷艳锯标志：龙吞口下悬朱红缨穗）
+                ctx.beginPath();
+                ctx.moveTo(0.962, 0.050);
+                ctx.quadraticCurveTo(0.992, 0.094, 0.974, 0.136);
+                ctx.quadraticCurveTo(0.946, 0.096, 0.934, 0.056);
+                ctx.closePath();
+                shape('#C62828', 0.013);
+                // 缨穗散丝
+                ctx.beginPath();
+                ctx.moveTo(0.970, 0.104);
+                ctx.quadraticCurveTo(1.000, 0.130, 0.990, 0.152);
+                ctx.lineWidth = 0.009; ctx.strokeStyle = U.rgba('#C62828', 0.78); ctx.stroke();
                 // 尾鐏
                 ctx.beginPath(); ctx.moveTo(-0.42, -0.036); ctx.lineTo(-0.52, -0.028); ctx.lineTo(-0.52, 0.028); ctx.lineTo(-0.42, 0.036); ctx.closePath();
                 shape(steelD);

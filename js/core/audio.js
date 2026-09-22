@@ -77,7 +77,7 @@ class AudioEngine {
         return { o, g };
     }
 
-    _noise(t0, dur, gain, filterType, f0, f1, q = 1) {
+    _noise(t0, dur, gain, filterType, f0, f1, q = 1, bus) {
         const src = this.ctx.createBufferSource();
         src.buffer = this.noiseBuffer;
         const flt = this.ctx.createBiquadFilter();
@@ -88,7 +88,7 @@ class AudioEngine {
         const g = this.ctx.createGain();
         g.gain.setValueAtTime(gain, t0);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        src.connect(flt); flt.connect(g); g.connect(this.sfxBus);
+        src.connect(flt); flt.connect(g); g.connect(bus || this.sfxBus);
         src.start(t0, Math.random() * 0.4); src.stop(t0 + dur + 0.02);
         return { src, g, flt };
     }
@@ -234,6 +234,13 @@ class AudioEngine {
 
     _schedule() {
         if (!this._track) return;
+        // 上下文挂起（失焦/切后台）时 currentTime 冻结。若照常排程，每次都会把
+        // 音符堆在同一个冻结时间戳上，resume 后积压的音符会一次性爆发。
+        // 这里空转等待，恢复后下一拍会落在真实时间上。
+        if (this.ctx.state !== 'running') {
+            this._musicTimer = setTimeout(() => this._schedule(), 250);
+            return;
+        }
         const cfg = AudioEngine.TRACKS[this._track];
         const stepMs = 60000 / cfg.bpm / 2; // 八分音符
         const step = this._musicStep++;
@@ -262,10 +269,10 @@ class AudioEngine {
         // 鼓点
         const drum = cfg.drum[step % cfg.drum.length];
         if (drum === 1) { // 鼓
-            this._noise(t, 0.14, 0.22, 'lowpass', 420, 90, 0.8);
+            this._noise(t, 0.14, 0.22, 'lowpass', 420, 90, 0.8, this.musicBus);
             this._osc('sine', 78, t, 0.14, 0.3, this.musicBus);
         } else if (drum === 2) { // 镲
-            this._noise(t, 0.1, 0.1, 'highpass', 5200, 8000, 0.7);
+            this._noise(t, 0.1, 0.1, 'highpass', 5200, 8000, 0.7, this.musicBus);
         }
 
         this._musicTimer = setTimeout(() => this._schedule(), stepMs);

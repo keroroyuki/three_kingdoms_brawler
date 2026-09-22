@@ -94,8 +94,8 @@ class UI {
         ctx.scale(k * 1, k * 1);
         ctx.translate(0, -FOOT_OFF);
         const look = p.look;
-        const pose = Fig.idle(this.t * 1.0);
-        Fig.draw(ctx, look, Fig.solve(pose), { time: this.t });
+        const pose = Fig.idle(this.t * 1.0, look);
+        Fig.draw(ctx, look, Fig.solve(pose, look.body), { time: this.t });
         ctx.restore();
         ctx.beginPath();
         U.roundRect(ctx, px + 6, py + 6, 52, 62, 6);
@@ -286,8 +286,10 @@ class UI {
             const sx = x + i * (sw + gap);
             ctx.fillStyle = '#2A1A16';
             U.roundRect(ctx, sx, y, sw, 16, 3); ctx.fill();
-            const lo = b.kit ? b.kit.phases[i] : 0;
-            const hi = i === 0 ? 1 : (b.kit ? b.kit.phases[i - 1] : 1);
+            // 第 i 段对应第 i 阶段：HP 落在 (phases[i+1], phases[i]]。
+            // phases[0] 恒为 1.0，故 hi 直接取 phases[i]，末段下限取 0。
+            const hi = b.kit ? b.kit.phases[i] : 1;
+            const lo = b.kit ? (b.kit.phases[i + 1] ?? 0) : 0;
             const v = U.clamp((r - lo) / Math.max(0.001, hi - lo), 0, 1);
             if (v > 0) {
                 const grd = ctx.createLinearGradient(sx, y, sx, y + 16);
@@ -546,8 +548,8 @@ class UI {
             const k = 74 * scale;
             ctx.scale(k, k);
             ctx.translate(0, -FOOT_OFF);
-            const pose = sel ? Fig.idle(this.t * 1.4) : Fig.idle(this.t * 0.7 + i);
-            Fig.draw(ctx, look, Fig.solve(pose), { time: this.t });
+            const pose = sel ? Fig.idle(this.t * 1.4, look) : Fig.idle(this.t * 0.7 + i, look);
+            Fig.draw(ctx, look, Fig.solve(pose, look.body), { time: this.t });
             ctx.restore();
 
             txt(ctx, look.name, x, cy + 66, sel ? 20 : 15, sel ? '#FFF0C4' : C.white, 'center', { stroke: C.ink, strokeW: 4 });
@@ -716,8 +718,9 @@ class UI {
         txt(ctx, '黄天已破，汉室重光。', VIEW.W / 2, 196, 18, U.rgba(C.white, 0.86), 'center', { weight: 500 });
 
         const bonus = g.computeBonus();
-        // 结算文字底板：夜景透出后保证数字可读
-        const panelH = 120 + bonus.length * 34 + 70;
+        // 结算文字底板：夜景透出后保证数字可读。
+        // 244 + panelH 不得超过 VIEW.H，否则底边描边被画布裁掉。
+        const panelH = Math.min(VIEW.H - 250, 120 + bonus.length * 34 + 66);
         ctx.fillStyle = 'rgba(6,5,3,0.62)';
         ctx.strokeStyle = 'rgba(201,162,39,0.35)';
         ctx.lineWidth = 2;

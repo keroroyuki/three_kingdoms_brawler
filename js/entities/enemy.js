@@ -468,6 +468,8 @@ class Boss extends Enemy {
         this.invuln = 1.2;
         this.arenaLock = cfg.lockX;
         this.scaleBase = (cfg.scale || 1) * 1.06;
+        // 纯视觉放大：BOSS 需要压倒性体量，但不牵连碰撞盒与击退质量
+        this.drawScale = this.look.bossScale || 1.72;
         this.mass = 3.2;
         this.scoreValue = 5000;
         this.hpBarPulse = 0;
@@ -478,6 +480,26 @@ class Boss extends Enemy {
         let p = 0;
         for (let i = 0; i < this.kit.phases.length; i++) if (r <= this.kit.phases[i]) p = i;
         return p;
+    }
+
+    /** BOSS 脚下能量场：持续 aura，随呼吸脉动，颜色取该 BOSS 的法术色 */
+    drawShadow(ctx, cam) {
+        if (this.remove) return;
+        const x = this.sx(cam), y = screenY(this.z) + (cam.y || 0);
+        const k = PPM * this.ds * (this.drawScale || 1);
+        const hue = this.look.magic || '#7E57C2';
+        const pulse = 0.86 + Math.sin(this.time * 3.2) * 0.14;
+        const r = 1.18 * k * pulse;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+        g.addColorStop(0, U.rgba(hue, 0.46));
+        g.addColorStop(0.45, U.rgba(hue, 0.19));
+        g.addColorStop(1, U.rgba(hue, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.32, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+        super.drawShadow(ctx, cam);
     }
 
     think(dt) {
@@ -786,8 +808,12 @@ class Boss extends Enemy {
 
     animate(dt) {
         if (this.current) {
-            // pose 由 tickSkill 设置（部分技能）
-            if (this.skillT < this.windupDur) this.pose = Fig.cast(this.time);
+            // sweep/thrust/spin 的攻击期由 bossMelee/bossSpin 自行驱动 pose，
+            // 不可在此覆盖；dash/leap/bolt/meteor/summon 不驱动 pose，
+            // 需在此兜底刷新施法姿态，否则 BOSS 会冻结成一张静帧。
+            const ownsPose = this.current.type === 'sweep' || this.current.type === 'thrust'
+                || this.current.type === 'spin';
+            if (this.skillT < this.windupDur || !ownsPose) this.pose = Fig.cast(this.time);
             return;
         }
         super.animate(dt);
@@ -796,13 +822,17 @@ class Boss extends Enemy {
     takeHit(h) {
         if (this.dead) return false;
         const r = super.takeHit(h);
-        // BOSS 不倒地、不进长硬直，改为短暂失衡
-        if (this.state === 'downA') {
-            this.vy = 0; this.y = 0;
-            this.forceState('stagger');
-            this.stun = 0.30;
-        } else if (this.state === 'hurt') {
-            this.forceState('idle');
+        // BOSS 不倒地、不进长硬直，改为短暂失衡。
+        // 注意 super.takeHit 在 hp 归零时已调用 die()（置 state='downA'、击飞），
+        // 此时不能改写死亡姿态，否则 BOSS 会站着原地淡出而不击飞倒地。
+        if (!this.dead) {
+            if (this.state === 'downA') {
+                this.vy = 0; this.y = 0;
+                this.forceState('stagger');
+                this.stun = 0.30;
+            } else if (this.state === 'hurt') {
+                this.forceState('idle');
+            }
         }
         return r;
     }
