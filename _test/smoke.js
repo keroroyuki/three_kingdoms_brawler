@@ -2,7 +2,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('C:/Users/14512/.workbuddy/binaries/node/versions/22.22.2-2/node_modules/playwright-core');
+const { chromium } = require('./pw');
 
 const CHROME = process.env.CHROME_BIN
     || 'C:/Users/14512/.agent-browser/browsers/chrome-152.0.7977.64/chrome.exe';
@@ -25,10 +25,14 @@ function probeSrc() {
         const c = document.getElementById('gameCanvas');
         let px = null;
         if (c) {
-            const ctx = c.getContext('2d');
-            const d = ctx.getImageData(0, 0, c.width, c.height).data;
+            // WebGL 画布不能直接 getContext('2d')，缩绘到离屏 2D 再采样
+            const tmp = document.createElement('canvas');
+            tmp.width = 400; tmp.height = 300;
+            const tctx = tmp.getContext('2d');
+            tctx.drawImage(c, 0, 0, tmp.width, tmp.height);
+            const d = tctx.getImageData(0, 0, tmp.width, tmp.height).data;
             let sum = 0, n = 0; const set = new Set();
-            for (let i = 0; i < d.length; i += 4 * 29) {
+            for (let i = 0; i < d.length; i += 4 * 3) {
                 const r = d[i], gg = d[i + 1], b = d[i + 2];
                 sum += (r + gg + b) / 3; n++;
                 set.add(((r >> 3) << 10) | ((gg >> 3) << 5) | (b >> 3));
@@ -449,15 +453,16 @@ async function waitState(page, want, ms, label) {
 
     say('=== 16. 交付级细节：缩放 / 失焦暂停 / 静音 / 最高战功 ===');
 
-    // 16a. 高分后备缓冲：canvas 后备尺寸应等于 800x600 × renderScale
+    // 16a. 高分辨率渲染：WebGL 后备缓冲不应低于 800x600
     const rs = await page.evaluate(`(() => {
-        const g = window.GAME, c = g.canvas;
-        return { scale: g.renderScale, w: c.width, h: c.height,
-                 cssW: c.style.width, cssH: c.style.height };
+        const g = window.GAME, c = g.stage.renderer.domElement;
+        return { dprCap: g.stage.dprCap || 1, w: c.width, h: c.height,
+                 cssW: c.style.width, cssH: c.style.height,
+                 ui: g.uiScale };
     })()`);
-    check('渲染缩放已生效 (renderScale >= 1)', rs.scale >= 1, JSON.stringify(rs));
-    check('后备缓冲与缩放一致', Math.abs(rs.w - 800 * rs.scale) <= 1 && Math.abs(rs.h - 600 * rs.scale) <= 1,
-        `w=${rs.w} h=${rs.h} scale=${rs.scale}`);
+    check('渲染分辨率已生效', rs.w >= 800 * 1.0 - 1 && rs.h >= 600 * 1.0 - 1,
+        `w=${rs.w} h=${rs.h} dprCap=${rs.dprCap} ui=${rs.ui}`);
+    check('后备缓冲比例正确', Math.abs(rs.w / rs.h - 4 / 3) < 0.02, `w=${rs.w} h=${rs.h}`);
     check('CSS 显示尺寸已设置', !!rs.cssW && !!rs.cssH, `${rs.cssW} x ${rs.cssH}`);
 
     // 16b. 最高战功：上一局失败已提交，应有记录

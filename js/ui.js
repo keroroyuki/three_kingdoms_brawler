@@ -1,6 +1,9 @@
 /* ============================================================
- * 三国战纪 · 界面层
- * HUD / 标题 / 选人 / 暂停 / 结算 / 横幅提示
+ * 三国战纪 · 界面层（three.js 版）
+ *
+ * 3D 战斗画面由 WebGL canvas 渲染，本层全部绘制在 #uiCanvas 覆盖层：
+ * HUD / 标题 / 选人 / 暂停 / 结算 / 横幅 / 伤害数字（后者在 FX3D）。
+ * 人物不再走 2D 绘制，选人界面直接展示场景中的 3D 武将。
  * ============================================================ */
 'use strict';
 
@@ -69,6 +72,298 @@ class UI {
     }
 
     /* ============================================================
+     * Q 版头像（HUD 用）
+     *
+     * 立绘由场景中的 3D 模型承担；HUD 的小方框只需要一张干净的
+     * 头像，程序化绘制可以保证任意分辨率下都锐利，也省掉一次
+     * 离屏渲染 + readPixels 的开销。
+     * ========================================================== */
+    drawPortrait(ctx, look, cx, cy, R) {
+        const hair = look.hair || '#1A1410';
+        const skin = look.skin || '#F2C9A0';
+        const skinD = look.skinDark || U.shade(skin, -0.18);
+        const shape = (look.face && look.face.shape) || 'oval';
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        /* 肩部：露一点衣领，头像才有依托 */
+        ctx.fillStyle = look.robe || '#4E342E';
+        ctx.beginPath();
+        ctx.moveTo(-R * 1.62, R * 2.1);
+        ctx.quadraticCurveTo(-R * 1.5, R * 1.0, -R * 0.5, R * 0.84);
+        ctx.lineTo(R * 0.5, R * 0.84);
+        ctx.quadraticCurveTo(R * 1.5, R * 1.0, R * 1.62, R * 2.1);
+        ctx.closePath();
+        ctx.fill();
+        // 交领
+        ctx.strokeStyle = look.trim || 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = R * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(-R * 0.34, R * 0.86); ctx.lineTo(0, R * 1.28); ctx.lineTo(R * 0.34, R * 0.86);
+        ctx.stroke();
+
+        /* 后发 */
+        ctx.fillStyle = hair;
+        ctx.beginPath();
+        ctx.ellipse(0, -R * 0.02, R * 1.02, R * 1.06, 0, 0, TAU);
+        ctx.fill();
+
+        /* 耳 */
+        ctx.fillStyle = skinD;
+        for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(s * R * 0.9, R * 0.08, R * 0.17, R * 0.28, 0, 0, TAU);
+            ctx.fill();
+        }
+
+        /* 脸 */
+        const rx = R * 0.84 * (shape === 'square' ? 1.07 : (shape === 'long' ? 0.96 : 1));
+        const ry = R * 0.96 * (shape === 'square' ? 0.97 : (shape === 'long' ? 1.04 : 1));
+        const grd = ctx.createLinearGradient(0, -ry, 0, ry);
+        grd.addColorStop(0, U.shade(skin, 0.06));
+        grd.addColorStop(1, skinD);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(52,26,12,0.45)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        /* 头饰 */
+        this._headwear(ctx, look, R, hair);
+
+        /* 眉 */
+        ctx.strokeStyle = hair;
+        ctx.lineCap = 'round';
+        const brow = (look.face && look.face.brow) || 'gentle';
+        for (const s of [-1, 1]) {
+            ctx.save();
+            ctx.translate(s * R * 0.36, -R * 0.30);
+            ctx.scale(s, 1);
+            if (brow === 'bushy') {
+                ctx.lineWidth = R * 0.20;
+                ctx.beginPath(); ctx.moveTo(-R * 0.24, R * 0.06); ctx.lineTo(R * 0.22, -R * 0.06); ctx.stroke();
+            } else if (brow === 'silkworm') {
+                ctx.lineWidth = R * 0.16;
+                ctx.beginPath(); ctx.arc(0, R * 0.06, R * 0.22, Math.PI * 1.12, Math.PI * 1.92); ctx.stroke();
+            } else if (brow === 'sharp') {
+                ctx.lineWidth = R * 0.10;
+                ctx.beginPath(); ctx.moveTo(-R * 0.24, R * 0.04); ctx.lineTo(R * 0.24, -R * 0.09); ctx.stroke();
+            } else if (brow === 'refined') {
+                ctx.lineWidth = R * 0.09;
+                ctx.beginPath(); ctx.moveTo(-R * 0.20, R * 0.02); ctx.quadraticCurveTo(0, -R * 0.12, R * 0.22, -R * 0.02); ctx.stroke();
+            } else {
+                ctx.lineWidth = R * 0.075;
+                ctx.beginPath(); ctx.moveTo(-R * 0.21, R * 0.03); ctx.quadraticCurveTo(0, -R * 0.10, R * 0.21, R * 0.03); ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        /* 眼 */
+        for (const s of [-1, 1]) {
+            const ex = s * R * 0.37, ey = R * 0.10;
+            ctx.fillStyle = '#FFF8EC';
+            ctx.beginPath(); ctx.ellipse(ex, ey, R * 0.17, R * 0.19, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = look.eyeColor || '#2A1710';
+            ctx.beginPath(); ctx.ellipse(ex + s * R * 0.015, ey + R * 0.015, R * 0.105, R * 0.135, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            ctx.beginPath(); ctx.arc(ex - R * 0.045, ey - R * 0.055, R * 0.042, 0, TAU); ctx.fill();
+            // 上眼睑
+            ctx.strokeStyle = 'rgba(40,20,10,0.75)';
+            ctx.lineWidth = R * 0.055;
+            ctx.beginPath(); ctx.arc(ex, ey + R * 0.02, R * 0.17, Math.PI * 1.06, Math.PI * 1.94); ctx.stroke();
+        }
+
+        /* 腮红 */
+        if (look.blush) {
+            ctx.fillStyle = U.rgba(look.blush, 0.35);
+            for (const s of [-1, 1]) {
+                ctx.beginPath(); ctx.ellipse(s * R * 0.60, R * 0.34, R * 0.17, R * 0.10, 0, 0, TAU); ctx.fill();
+            }
+        }
+
+        /* 嘴 */
+        ctx.strokeStyle = 'rgba(90,40,28,0.8)';
+        ctx.lineWidth = R * 0.055;
+        ctx.beginPath();
+        ctx.arc(0, R * 0.38, R * 0.13, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+
+        /* 须 */
+        const beard = look.beard;
+        if (beard) {
+            const bc = look.beardColor || hair;
+            ctx.fillStyle = bc;
+            if (beard === 'long') {
+                ctx.beginPath();
+                ctx.moveTo(-rx * 0.62, R * 0.58);
+                ctx.quadraticCurveTo(-rx * 0.86, R * 1.5, -R * 0.10, R * 1.95);
+                ctx.quadraticCurveTo(rx * 0.86, R * 1.5, rx * 0.62, R * 0.58);
+                ctx.quadraticCurveTo(0, R * 1.02, -rx * 0.62, R * 0.58);
+                ctx.closePath();
+                ctx.fill();
+            } else if (beard === 'stubble') {
+                ctx.fillStyle = U.rgba(bc, 0.55);
+                ctx.beginPath();
+                ctx.ellipse(0, R * 0.72, rx * 0.82, R * 0.34, 0, 0, Math.PI);
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.22, R * 0.62);
+                ctx.quadraticCurveTo(0, R * 1.15, R * 0.22, R * 0.62);
+                ctx.quadraticCurveTo(0, R * 0.78, -R * 0.22, R * 0.62);
+                ctx.fill();
+            }
+            // 髭
+            ctx.strokeStyle = bc;
+            ctx.lineWidth = R * 0.075;
+            ctx.beginPath();
+            ctx.moveTo(-R * 0.26, R * 0.46); ctx.quadraticCurveTo(-R * 0.12, R * 0.56, 0, R * 0.46);
+            ctx.moveTo(R * 0.26, R * 0.46); ctx.quadraticCurveTo(R * 0.12, R * 0.56, 0, R * 0.46);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    /** 头饰：与 3D rig 的 head 分支一一对应 */
+    _headwear(ctx, look, R, hair) {
+        const band = look.bandColor || '#C9A227';
+        switch (look.head) {
+            case 'crown': {
+                // 进贤冠：前低后高的黑冠，额前一道金梁
+                ctx.fillStyle = '#241A14';
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.92, -R * 0.18);
+                ctx.lineTo(-R * 0.58, -R * 1.34);
+                ctx.lineTo(R * 0.58, -R * 1.34);
+                ctx.lineTo(R * 0.92, -R * 0.18);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.2; ctx.stroke();
+                ctx.fillStyle = band;
+                ctx.fillRect(-R * 0.94, -R * 0.44, R * 1.88, R * 0.20);
+                break;
+            }
+            case 'topknot': {
+                // 关羽：绿巾束发，髻在头顶
+                ctx.fillStyle = hair;
+                ctx.beginPath(); ctx.arc(0, -R * 1.16, R * 0.40, 0, TAU); ctx.fill();
+                ctx.fillStyle = band;
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.94, -R * 0.36);
+                ctx.quadraticCurveTo(0, -R * 0.86, R * 0.94, -R * 0.36);
+                ctx.lineTo(R * 0.94, -R * 0.04);
+                ctx.quadraticCurveTo(0, -R * 0.52, -R * 0.94, -R * 0.04);
+                ctx.closePath();
+                ctx.fill();
+                // 巾角
+                ctx.beginPath();
+                ctx.moveTo(R * 0.9, -R * 0.30); ctx.lineTo(R * 1.34, -R * 0.62); ctx.lineTo(R * 1.22, -R * 0.12);
+                ctx.closePath(); ctx.fill();
+                break;
+            }
+            case 'wild': {
+                // 张飞：硬发如戟
+                ctx.fillStyle = hair;
+                for (let i = 0; i < 7; i++) {
+                    const a = -Math.PI * 0.92 + i * Math.PI * 0.14;
+                    const bx = Math.cos(a) * R * 0.86, by = Math.sin(a) * R * 0.88;
+                    const tx = Math.cos(a) * R * 1.42, ty = Math.sin(a) * R * 1.46;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - R * 0.16, by + R * 0.06);
+                    ctx.lineTo(tx, ty);
+                    ctx.lineTo(bx + R * 0.16, by - R * 0.04);
+                    ctx.closePath(); ctx.fill();
+                }
+                ctx.fillStyle = band;
+                ctx.fillRect(-R * 0.92, -R * 0.46, R * 1.84, R * 0.18);
+                break;
+            }
+            case 'helm': {
+                // 赵云：银盔红缨
+                ctx.fillStyle = look.armor || '#CFD8DC';
+                ctx.beginPath();
+                ctx.arc(0, -R * 0.16, R * 1.0, Math.PI * 1.02, Math.PI * 1.98);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(40,50,60,0.55)'; ctx.lineWidth = 1.4; ctx.stroke();
+                ctx.fillStyle = look.trim || '#C9A227';
+                ctx.fillRect(-R * 0.98, -R * 0.38, R * 1.96, R * 0.16);
+                // 盔顶红缨
+                ctx.fillStyle = look.plume || '#D32F2F';
+                ctx.beginPath(); ctx.ellipse(0, -R * 1.18, R * 0.20, R * 0.34, 0, 0, TAU); ctx.fill();
+                break;
+            }
+            case 'cap': {
+                // 诸葛亮：纶巾
+                ctx.fillStyle = look.robeDark || '#B0BEC5';
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.96, -R * 0.06);
+                ctx.quadraticCurveTo(-R * 0.86, -R * 1.30, 0, -R * 1.28);
+                ctx.quadraticCurveTo(R * 0.86, -R * 1.30, R * 0.96, -R * 0.06);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(40,40,40,0.4)'; ctx.lineWidth = 1.1; ctx.stroke();
+                ctx.fillStyle = look.sash || '#C9A227';
+                ctx.fillRect(-R * 0.96, -R * 0.34, R * 1.92, R * 0.16);
+                break;
+            }
+            case 'cult': {
+                // 张角：黄天高冠
+                ctx.fillStyle = '#2B2118';
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.78, -R * 0.10);
+                ctx.lineTo(-R * 0.62, -R * 1.62);
+                ctx.lineTo(R * 0.62, -R * 1.62);
+                ctx.lineTo(R * 0.78, -R * 0.10);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = band;
+                ctx.fillRect(-R * 0.82, -R * 0.42, R * 1.64, R * 0.22);
+                ctx.fillRect(-R * 0.66, -R * 1.30, R * 1.32, R * 0.12);
+                break;
+            }
+            case 'mask': {
+                // 天魔：獠面双角
+                ctx.fillStyle = '#221A18';
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.94, -R * 0.12);
+                ctx.quadraticCurveTo(0, -R * 1.10, R * 0.94, -R * 0.12);
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = look.trim || '#C9A227';
+                ctx.lineWidth = R * 0.10;
+                for (const s of [-1, 1]) {
+                    ctx.beginPath();
+                    ctx.moveTo(s * R * 0.52, -R * 0.82);
+                    ctx.quadraticCurveTo(s * R * 0.96, -R * 1.42, s * R * 0.66, -R * 1.62);
+                    ctx.stroke();
+                }
+                // 面甲
+                ctx.fillStyle = U.rgba('#B3352B', 0.55);
+                ctx.beginPath(); ctx.ellipse(0, R * 0.06, R * 0.82, R * 0.42, 0, 0, TAU); ctx.fill();
+                break;
+            }
+            default: {
+                // band：黄巾
+                ctx.fillStyle = band;
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.96, -R * 0.40);
+                ctx.quadraticCurveTo(0, -R * 0.96, R * 0.96, -R * 0.40);
+                ctx.lineTo(R * 0.96, -R * 0.02);
+                ctx.quadraticCurveTo(0, -R * 0.56, -R * 0.96, -R * 0.02);
+                ctx.closePath(); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-R * 0.9, -R * 0.30); ctx.lineTo(-R * 1.40, -R * 0.02); ctx.lineTo(-R * 0.96, R * 0.16);
+                ctx.closePath(); ctx.fill();
+                break;
+            }
+        }
+    }
+
+    /* ============================================================
      * HUD
      * ========================================================== */
     drawHUD(ctx) {
@@ -89,13 +384,11 @@ class UI {
         U.roundRect(ctx, px + 6, py + 6, 52, 62, 6);
         ctx.clip();
         ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
-        const k = 34;
-        ctx.translate(px + 32, py + 66);
-        ctx.scale(k * 1, k * 1);
-        ctx.translate(0, -FOOT_OFF);
-        const look = p.look;
-        const pose = Fig.idle(this.t * 1.0, look);
-        Fig.draw(ctx, look, Fig.solve(pose, look.body), { time: this.t });
+        const grd = ctx.createLinearGradient(px, py, px, py + 62);
+        grd.addColorStop(0, U.rgba(p.look.robe || '#2E7D32', 0.45));
+        grd.addColorStop(1, 'rgba(0,0,0,0.55)');
+        ctx.fillStyle = grd; ctx.fillRect(px + 6, py + 6, 52, 62);
+        this.drawPortrait(ctx, p.look, px + 32, py + 32, 16.5, this.t);
         ctx.restore();
         ctx.beginPath();
         U.roundRect(ctx, px + 6, py + 6, 52, 62, 6);
@@ -306,7 +599,6 @@ class UI {
 
     drawWaveBanner(ctx) {
         const b = this.waveBanner;
-        const k = b.t / b.dur;
         const inK = U.clamp(b.t / 0.35, 0, 1);
         const outK = U.clamp((b.dur - b.t) / 0.4, 0, 1);
         const a = Math.min(U.ease.outCubic(inK), outK);
@@ -373,18 +665,25 @@ class UI {
     drawTitle(ctx) {
         const g = this.g;
         ctx.save();
-        // 背景已由场景绘制，这里加暗角
-        const grd = ctx.createLinearGradient(0, 0, 0, VIEW.H);
-        grd.addColorStop(0, 'rgba(12,8,6,0.78)');
-        grd.addColorStop(0.45, 'rgba(12,8,6,0.42)');
-        grd.addColorStop(1, 'rgba(12,8,6,0.86)');
+        // 左侧压暗保证菜单可读，右侧留亮让 3D 武将呈现
+        const grd = ctx.createLinearGradient(0, 0, VIEW.W, 0);
+        grd.addColorStop(0, 'rgba(10,7,5,0.80)');
+        grd.addColorStop(0.46, 'rgba(10,7,5,0.56)');
+        grd.addColorStop(0.72, 'rgba(10,7,5,0.12)');
+        grd.addColorStop(1, 'rgba(10,7,5,0.34)');
         ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, VIEW.W, VIEW.H);
+        const vg = ctx.createLinearGradient(0, 0, 0, VIEW.H);
+        vg.addColorStop(0, 'rgba(10,7,5,0.42)');
+        vg.addColorStop(0.4, 'rgba(10,7,5,0)');
+        vg.addColorStop(1, 'rgba(10,7,5,0.56)');
+        ctx.fillStyle = vg;
         ctx.fillRect(0, 0, VIEW.W, VIEW.H);
 
         const bob = Math.sin(this.t * 1.6) * 5;
         // 标题
         ctx.save();
-        ctx.translate(VIEW.W / 2, 158 + bob);
+        ctx.translate(VIEW.W / 2 - 26, 158 + bob);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const rg = ctx.createRadialGradient(0, 0, 10, 0, 0, 280);
@@ -394,20 +693,20 @@ class UI {
         ctx.beginPath(); ctx.arc(0, 0, 280, 0, TAU); ctx.fill();
         ctx.restore();
 
-        txt(ctx, '三 国 战 纪', 0, 0, 76, '#F7E3B0', 'center', { stroke: '#7A2E12', strokeW: 10 });
+        txt(ctx, '三 国 战 纪', 0, 0, 74, '#F7E3B0', 'center', { stroke: '#7A2E12', strokeW: 10 });
         ctx.save();
         ctx.globalAlpha = 0.9;
-        txt(ctx, '三 国 战 纪', 0, 0, 76, 'rgba(255,255,255,0.20)', 'center', { shadow: false });
+        txt(ctx, '三 国 战 纪', 0, 0, 74, 'rgba(255,255,255,0.20)', 'center', { shadow: false });
         ctx.restore();
-        txt(ctx, 'THREE KINGDOMS BRAWLER', 6, 34, 16, C.gold, 'center', { weight: 600 });
+        txt(ctx, 'THREE KINGDOMS BRAWLER', 6, 34, 15, C.gold, 'center', { weight: 600 });
         // 朱印
         ctx.save();
-        ctx.translate(196, 44);
+        ctx.translate(192, 40);
         ctx.rotate(-0.12);
         ctx.fillStyle = '#B71C1C';
-        U.roundRect(ctx, -20, -20, 40, 40, 5); ctx.fill();
+        U.roundRect(ctx, -19, -19, 38, 38, 5); ctx.fill();
         ctx.strokeStyle = U.rgba('#FFFFFF', 0.7); ctx.lineWidth = 2; ctx.stroke();
-        txt(ctx, '汉', 0, 10, 26, '#FFEBEE', 'center', { shadow: false });
+        txt(ctx, '汉', 0, 9, 25, '#FFEBEE', 'center', { shadow: false });
         ctx.restore();
         ctx.restore();
 
@@ -488,80 +787,85 @@ class UI {
     }
 
     /* ============================================================
-     * 选人画面
+     * 选人画面：武将本体在 3D 场景里，本层只做名牌与详情
      * ========================================================== */
     drawSelect(ctx) {
         const g = this.g;
         ctx.save();
+
+        // 上下压暗、中间留亮，让 5 名武将站在画面中央
         const grd = ctx.createLinearGradient(0, 0, 0, VIEW.H);
-        grd.addColorStop(0, 'rgba(14,10,7,0.92)');
-        grd.addColorStop(0.55, 'rgba(24,17,12,0.86)');
-        grd.addColorStop(1, 'rgba(10,7,5,0.95)');
+        grd.addColorStop(0, 'rgba(12,8,6,0.86)');
+        grd.addColorStop(0.26, 'rgba(12,8,6,0.34)');
+        grd.addColorStop(0.52, 'rgba(12,8,6,0.06)');
+        grd.addColorStop(0.74, 'rgba(8,6,4,0.62)');
+        grd.addColorStop(1, 'rgba(8,6,4,0.96)');
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, VIEW.W, VIEW.H);
 
-        txt(ctx, '择 一 明 主', VIEW.W / 2, 62, 32, C.gold, 'center', { stroke: C.ink, strokeW: 6 });
-        txt(ctx, '← → 选择    Enter 出征    Esc 返回', VIEW.W / 2, 88, 13, C.dim, 'center', { weight: 500 });
+        txt(ctx, '择 一 明 主', VIEW.W / 2, 56, 30, C.gold, 'center', { stroke: C.ink, strokeW: 6 });
+        txt(ctx, '← → 选择    Enter 出征    Esc 返回', VIEW.W / 2, 80, 13, C.dim, 'center', { weight: 500 });
 
         const keys = Object.keys(HERO_KIT);
-        const cx = VIEW.W / 2, cy = 300;
         const idx = g.selectIndex;
+        const list = g.showcase || [];
+        const pr = {};
 
-        // 卡片
-        for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
-            const look = LOOKS[key];
-            const off = i - idx;
+        for (let i = 0; i < list.length; i++) {
+            const h = list[i];
             const sel = i === idx;
-            const x = cx + off * 128;
-            const scale = sel ? 1 : 0.74;
-            const a = sel ? 1 : U.clamp(1 - Math.abs(off) * 0.32, 0.14, 0.6);
+            const a = h.a;
+            g.stage.project(a.x, 2.24, a.z, pr);
+            if (!pr.visible) continue;
 
-            ctx.save();
-            ctx.globalAlpha = a;
-            const cw = 108, ch = 158;
+            const alpha = sel ? 1 : 0.62;
+            ctx.globalAlpha = alpha;
+
+            // 选中：头顶菱形 + 脚下横线
             if (sel) {
+                const bob = Math.sin(this.t * 3.2) * 4;
+                const my = pr.y - 16 + bob;
                 ctx.save();
-                ctx.globalCompositeOperation = 'lighter';
-                const rg = ctx.createRadialGradient(x, cy - 10, 8, x, cy - 10, 130);
-                rg.addColorStop(0, U.rgba(C.gold, 0.30));
-                rg.addColorStop(1, U.rgba(C.gold, 0));
-                ctx.fillStyle = rg;
-                ctx.beginPath(); ctx.arc(x, cy - 10, 130, 0, TAU); ctx.fill();
+                ctx.translate(pr.x, my);
+                ctx.rotate(Math.PI / 4);
+                ctx.fillStyle = C.gold;
+                ctx.fillRect(-5, -5, 10, 10);
+                ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.strokeRect(-5, -5, 10, 10);
                 ctx.restore();
             }
-            U.roundRect(ctx, x - cw / 2, cy - ch / 2 - 6, cw, ch, 10);
-            ctx.fillStyle = sel ? 'rgba(58,42,28,0.92)' : 'rgba(30,22,16,0.72)';
-            ctx.fill();
-            ctx.lineWidth = sel ? 3 : 1.6;
-            ctx.strokeStyle = sel ? C.gold : 'rgba(242,193,78,0.34)';
-            ctx.stroke();
-            this.hook(ctx, x - cw / 2 + 4, cy - ch / 2 - 2, cw - 8, ch - 8, 12,
-                sel ? U.rgba(C.gold, 0.9) : 'rgba(242,193,78,0.3)', sel ? 2.2 : 1.4);
 
-            // 立绘
-            ctx.save();
-            ctx.beginPath();
-            U.roundRect(ctx, x - cw / 2 + 3, cy - ch / 2 - 3, cw - 6, ch - 6, 8);
-            ctx.clip();
-            ctx.translate(x, cy + 56);
-            const k = 74 * scale;
-            ctx.scale(k, k);
-            ctx.translate(0, -FOOT_OFF);
-            const pose = sel ? Fig.idle(this.t * 1.4, look) : Fig.idle(this.t * 0.7 + i, look);
-            Fig.draw(ctx, look, Fig.solve(pose, look.body), { time: this.t });
-            ctx.restore();
+            const name = LOOKS[h.key].name;
+            const size = sel ? 23 : 16;
+            // 名牌暗底：两端淡出，不跟身后的栅栏糊在一起
+            const tw = name.length * size + 26;
+            const gh = ctx.createLinearGradient(pr.x - tw / 2, 0, pr.x + tw / 2, 0);
+            gh.addColorStop(0, 'rgba(8,6,4,0)');
+            gh.addColorStop(0.20, 'rgba(8,6,4,0.50)');
+            gh.addColorStop(0.80, 'rgba(8,6,4,0.50)');
+            gh.addColorStop(1, 'rgba(8,6,4,0)');
+            ctx.fillStyle = gh;
+            ctx.fillRect(pr.x - tw / 2, pr.y - size * 0.98, tw, size * 1.62);
+            txt(ctx, name, pr.x, pr.y + (sel ? 2 : 0), size,
+                sel ? '#FFF0C4' : U.rgba(C.white, 0.86), 'center', { stroke: C.ink, strokeW: sel ? 5 : 4 });
 
-            txt(ctx, look.name, x, cy + 66, sel ? 20 : 15, sel ? '#FFF0C4' : C.white, 'center', { stroke: C.ink, strokeW: 4 });
-            ctx.restore();
+            if (sel) {
+                const w = 74, y = pr.y + 12;
+                const glow = ctx.createLinearGradient(pr.x - w / 2, 0, pr.x + w / 2, 0);
+                glow.addColorStop(0, 'rgba(242,193,78,0)');
+                glow.addColorStop(0.5, 'rgba(242,193,78,0.85)');
+                glow.addColorStop(1, 'rgba(242,193,78,0)');
+                ctx.fillStyle = glow;
+                ctx.fillRect(pr.x - w / 2, y, w, 2);
+            }
         }
+        ctx.globalAlpha = 1;
 
         // 详情面板
         const look = LOOKS[keys[idx]];
         const kit = HERO_KIT[keys[idx]];
         const st = look.stats;
         ctx.save();
-        const pw = 470, ph = 118, pxx = cx - pw / 2, pyy = 432;
+        const pw = 470, ph = 118, pxx = VIEW.W / 2 - pw / 2, pyy = 432;
         U.roundRect(ctx, pxx, pyy, pw, ph, 10);
         ctx.fillStyle = 'rgba(20,14,10,0.86)'; ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = U.rgba(C.gold, 0.6); ctx.stroke();
@@ -572,7 +876,7 @@ class UI {
         txt(ctx, look.desc, pxx + 22, pyy + 58, 14, U.rgba(C.white, 0.85), 'left', { weight: 500 });
         txt(ctx, '必杀：' + kit.skillName, pxx + 22, pyy + 80, 14, '#FFE9A8', 'left', { weight: 600 });
 
-        // 五维
+        // 四维
         const bars = [
             ['体', st.hp / 170], ['攻', st.atk / 26], ['速', st.spd / 240], ['程', st.reach / 1.6]
         ];
@@ -698,7 +1002,7 @@ class UI {
     drawVictory(ctx) {
         const g = this.g, p = g.player;
         ctx.save();
-        // 渐变夜幕：上浓下淡，让身后洛阳宫城夜景仍可读（纯 0.92 黑会把场景全盖住）
+        // 渐变夜幕：上浓下淡，让身后洛阳宫城夜景仍可读
         const scrim = ctx.createLinearGradient(0, 0, 0, VIEW.H);
         scrim.addColorStop(0, 'rgba(8,6,4,0.88)');
         scrim.addColorStop(0.45, 'rgba(8,6,4,0.55)');
@@ -707,7 +1011,8 @@ class UI {
         ctx.fillRect(0, 0, VIEW.W, VIEW.H);
         // 主角身后一束暖光（克敌凯旋的舞台感）
         if (p) {
-            const px = p.sx(g.cam), py = p.cy(g.cam) - 60;
+            const pr = g.stage.project(p.x, p.y + 1.2, p.z);
+            const px = pr.x, py = pr.y;
             const glow = ctx.createRadialGradient(px, py, 10, px, py, 150);
             glow.addColorStop(0, 'rgba(255,214,140,0.30)');
             glow.addColorStop(1, 'rgba(255,214,140,0)');

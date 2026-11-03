@@ -1,11 +1,11 @@
 /* 三国战纪 · 性能探测 */
 'use strict';
-const { chromium } = require('C:/Users/14512/.workbuddy/binaries/node/versions/22.22.2-2/node_modules/playwright-core');
+const { chromium } = require('./pw');
 const CHROME = process.env.CHROME_BIN || 'C:/Users/14512/.agent-browser/browsers/chrome-152.0.7977.64/chrome.exe';
 const URL = process.env.GAME_URL || 'http://127.0.0.1:8787/index.html';
 
 (async () => {
-    const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu', '--mute-audio'] });
+    const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox','--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader','--mute-audio'] });
     const page = await browser.newPage({ viewport: { width: 900, height: 720 } });
 
     // 测量加载时间

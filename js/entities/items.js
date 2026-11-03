@@ -1,5 +1,8 @@
 /* ============================================================
- * 三国战纪 · 掉落道具
+ * 三国战纪 · 掉落道具与可破坏物（three.js 版）
+ *
+ * 每件道具/木箱的部件在首次使用时合并成单一 geometry，
+ * 之后所有同类实例共享几何与材质 —— 单件只占 1 次 draw call。
  * ============================================================ */
 'use strict';
 
@@ -12,199 +15,151 @@ const ITEM_KINDS = {
     scroll: { name: '兵书', rage: 100, heal: 20, color: '#EFEFEF', dark: '#8D6E63', icon: 'scroll', score: 600 }
 };
 
-/** 图标绘制（单位坐标，原点为图标中心）—— 仅在烘焙精灵时调用一次 */
-function drawItemIcon(ctx, d) {
-    const OUT = '#2B1B12';
-    const stroke = (w) => { ctx.lineWidth = w || 1.8; ctx.strokeStyle = OUT; ctx.stroke(); };
+/* ============================================================
+ * 投影贴图（道具/木箱落地时的接地影）
+ * ========================================================== */
+let _SOFT_SHADOW = null;
+function softShadowTex() {
+    if (_SOFT_SHADOW) return _SOFT_SHADOW;
+    const n = 64;
+    const c = document.createElement('canvas');
+    c.width = c.height = n;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(n / 2, n / 2, 1, n / 2, n / 2, n / 2);
+    g.addColorStop(0, 'rgba(0,0,0,0.55)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0.26)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, n, n);
+    const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    t.colorSpace = THREE.SRGBColorSpace;
+    _SOFT_SHADOW = t;
+    return t;
+}
+
+/* ============================================================
+ * 道具模型：原点在几何中心，长宽约 0.3~0.4 世界单位
+ * ========================================================== */
+function buildItemGeometry(d) {
+    const parts = [];
 
     switch (d.icon) {
+        /* 胡饼：汉末自西域传入，饼面撒胡麻，是行军最常见的干粮 */
         case 'bun': {
-            // 胡麻饼：汉末自西域传入，饼面撒芝麻，是当时行军最常见的干粮
-            ctx.beginPath(); ctx.ellipse(0, 1, 11.5, 8.2, -0.08, 0, TAU);
-            ctx.fillStyle = d.color; ctx.fill(); stroke(1.8);
-            ctx.beginPath(); ctx.ellipse(0, 1, 11.5, 8.2, -0.08, 0.15, Math.PI - 0.35);
-            ctx.lineWidth = 2; ctx.strokeStyle = U.rgba(d.dark, 0.75); ctx.stroke();
-            ctx.fillStyle = '#FBF3DC';
-            const ses = [[-6.5, -2.5], [-2.5, -4.5], [2, -4], [6.5, -1.5],
-            [-4.5, 2.5], [0.5, 4], [5.5, 2.5], [-7.5, 0.5]];
-            for (const [sx, sy] of ses) {
-                ctx.beginPath(); ctx.ellipse(sx, sy, 1.15, 0.8, 0.5, 0, TAU); ctx.fill();
+            parts.push(G.at(G.sphere(0.155, d.color, 16, 12, 1, 0.54, 1), 0, 0, 0));
+            // 饼面隆起的边圈
+            parts.push(G.at(G.torus(0.112, 0.016, d.dark), 0, 0.055, 0, Math.PI / 2, 0, 0));
+            // 芝麻：位置固定，保证每次掉落长得一样
+            const seeds = [
+                [-0.07, 0.076, -0.02], [-0.02, 0.083, -0.05], [0.035, 0.082, -0.035],
+                [0.075, 0.075, 0.01], [-0.055, 0.079, 0.045], [0.0, 0.084, 0.05],
+                [0.055, 0.078, 0.06], [-0.095, 0.070, 0.025]
+            ];
+            for (const s of seeds) {
+                parts.push(G.at(G.sphere(0.014, '#FBF3DC', 6, 5, 1, 0.55, 1.35), s[0], s[1], s[2]));
             }
-            ctx.beginPath(); ctx.ellipse(-4, -2.5, 4.2, 2.2, -0.4, 0, TAU);
-            ctx.fillStyle = U.rgba('#FFFFFF', 0.28); ctx.fill();
             break;
         }
+
+        /* 炙鸡腿：汉画像石庖厨图常见「貊炙」，整腿炙烤，骨端便于持握 */
         case 'meat': {
-            // 炙鸡腿：汉画像石庖厨图常见「貊炙」，整腿炙烤，骨端缠布便于持握
-            ctx.beginPath(); ctx.ellipse(-2.5, 2, 9.5, 7.6, -0.15, 0, TAU);
-            ctx.fillStyle = d.color; ctx.fill(); stroke(2);
-            ctx.strokeStyle = 'rgba(84,36,8,0.5)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(-8.5, -0.5); ctx.lineTo(-3, 1.5);
-            ctx.moveTo(-7, 4.5); ctx.lineTo(-1, 6);
-            ctx.stroke();
-            ctx.beginPath(); ctx.ellipse(-4.5, 0, 4.4, 2.3, -0.4, 0, TAU);
-            ctx.fillStyle = U.rgba('#FFFFFF', 0.3); ctx.fill();
-            // 腿骨 + 骨节
-            ctx.strokeStyle = '#EFE6D2'; ctx.lineWidth = 4.4; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(4.5, -0.5); ctx.lineTo(11, 3.5); ctx.stroke();
-            ctx.strokeStyle = OUT; ctx.lineWidth = 1.1;
-            ctx.beginPath(); ctx.moveTo(4.5, -0.5); ctx.lineTo(11, 3.5); ctx.stroke();
-            ctx.beginPath(); ctx.arc(12.6, 4.4, 2.7, 0, TAU);
-            ctx.fillStyle = '#EFE6D2'; ctx.fill(); stroke(1.2);
-            // 骨端缠布
-            ctx.strokeStyle = '#E8E0CC'; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(6.5, 0.6); ctx.lineTo(8.6, 3.4); ctx.stroke();
+            const tilt = 1.12;
+            parts.push(G.at(G.capsule(0.088, 0.13, d.color, 12), -0.03, -0.01, 0, 0, 0, tilt));
+            // 烤痕
+            parts.push(G.at(G.torus(0.089, 0.011, d.dark), -0.055, 0.03, 0, Math.PI / 2, 0.00, 0.62));
+            parts.push(G.at(G.torus(0.088, 0.009, d.dark), -0.02, 0.003, 0, Math.PI / 2, 0.00, 0.62));
+            // 腿骨
+            parts.push(G.at(G.cyl(0.021, 0.024, 0.17, '#EFE6D2', 8), 0.10, 0.09, 0, 0, 0, tilt));
+            parts.push(G.at(G.sphere(0.036, '#EFE6D2', 10, 8), 0.165, 0.15, 0, 0, 0, 0, 1, 0.8, 0.8));
             break;
         }
-        case 'jar': {
-            // 酒坛：小口鼓腹灰陶，红布封口扎绳，颈部贴「酒」字签
-            ctx.beginPath();
-            ctx.moveTo(-7, -7); ctx.lineTo(7, -7);
-            ctx.quadraticCurveTo(13, 0, 7.5, 8.5); ctx.lineTo(-7.5, 8.5);
-            ctx.quadraticCurveTo(-13, 0, -7, -7);
-            ctx.closePath();
-            ctx.fillStyle = d.color; ctx.fill(); stroke(1.8);
-            ctx.beginPath(); ctx.ellipse(-5, 1, 3.4, 5.4, 0.1, 0, TAU);
-            ctx.fillStyle = U.rgba('#FFFFFF', 0.24); ctx.fill();
+
+        /* 杜康酒：小口鼓腹灰陶，红布封口扎绳，颈下贴「酒」字签 */
+        case 'wine': {
+            parts.push(G.lathe([
+                [0.001, -0.20], [0.135, -0.195], [0.185, -0.12], [0.192, -0.02],
+                [0.165, 0.075], [0.105, 0.125], [0.082, 0.17], [0.094, 0.192], [0.001, 0.195]
+            ], d.color, 16));
             // 红布封口
-            ctx.fillStyle = '#B71C1C';
-            ctx.beginPath();
-            ctx.moveTo(-9, -8.5); ctx.quadraticCurveTo(-12, -4, -8, -2.5);
-            ctx.lineTo(-4, -8); ctx.closePath(); ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(9, -8.5); ctx.quadraticCurveTo(12, -4, 8, -2.5);
-            ctx.lineTo(4, -8); ctx.closePath(); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(0, -8.5, 9.5, 4, 0, 0, TAU);
-            ctx.fillStyle = '#8E1414'; ctx.fill(); stroke(1.6);
-            ctx.strokeStyle = '#D8BC7A'; ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(-9.5, -8); ctx.quadraticCurveTo(0, -6, 9.5, -8);
-            ctx.stroke();
-            // 酒字签（三笔意象，小尺寸下仍可读）
-            ctx.fillStyle = '#F6EFDD';
-            ctx.fillRect(-3.6, -1.6, 7.2, 7.2);
-            ctx.lineWidth = 0.9; ctx.strokeStyle = 'rgba(50,30,15,0.7)';
-            ctx.strokeRect(-3.6, -1.6, 7.2, 7.2);
-            ctx.strokeStyle = '#3E2723'; ctx.lineWidth = 0.9; ctx.lineCap = 'butt';
-            ctx.beginPath();
-            ctx.moveTo(-2.4, -0.4); ctx.lineTo(2.4, -0.4);
-            ctx.moveTo(-2.4, 1.4); ctx.lineTo(2.4, 1.4);
-            ctx.moveTo(-1.4, 3.2); ctx.lineTo(1.4, 3.2);
-            ctx.stroke();
+            parts.push(G.at(G.cyl(0.108, 0.125, 0.038, '#B71C1C', 14), 0, 0.198, 0));
+            // 扎绳
+            parts.push(G.at(G.torus(0.126, 0.012, '#D8BC7A'), 0, 0.185, 0, Math.PI / 2, 0, 0));
+            // 酒字签（两道墨痕代替字，小尺寸下仍可读）
+            parts.push(G.at(G.plane(0.105, 0.115, '#F6EFDD'), 0, -0.005, 0.188));
+            parts.push(G.at(G.box(0.062, 0.011, 0.006, '#3E2723'), 0, 0.026, 0.193));
+            parts.push(G.at(G.box(0.062, 0.011, 0.006, '#3E2723'), 0, -0.002, 0.193));
+            parts.push(G.at(G.box(0.040, 0.011, 0.006, '#3E2723'), 0, -0.030, 0.193));
             break;
         }
+
+        /* 金铢：外圆内方的五铢形制，内外有廓 */
         case 'coin': {
-            // 金铢：外圆内方的五铢形制，内外有廓
-            ctx.beginPath(); ctx.arc(0, 0, 9.8, 0, TAU);
-            ctx.fillStyle = d.color; ctx.fill(); stroke(1.6);
-            ctx.beginPath(); ctx.arc(0, 0, 7.4, 0, TAU);
-            ctx.lineWidth = 1.1; ctx.strokeStyle = U.rgba(d.dark, 0.85); ctx.stroke();
-            ctx.fillStyle = U.rgba('#3A2A08', 0.85);
-            ctx.fillRect(-2.7, -2.7, 5.4, 5.4);
-            ctx.lineWidth = 1; ctx.strokeStyle = U.rgba(d.dark, 0.9);
-            ctx.strokeRect(-2.7, -2.7, 5.4, 5.4);
-            // 上下「五铢」意象的短刻痕
-            ctx.strokeStyle = U.rgba('#5A440A', 0.8); ctx.lineWidth = 0.9;
-            ctx.beginPath();
-            ctx.moveTo(-6.2, -4.6); ctx.lineTo(-3.4, -4.6);
-            ctx.moveTo(3.4, -4.6); ctx.lineTo(6.2, -4.6);
-            ctx.stroke();
-            ctx.beginPath(); ctx.arc(-3.4, -3.6, 3.1, 0, TAU);
-            ctx.fillStyle = U.rgba('#FFFFFF', 0.4); ctx.fill();
+            parts.push(G.at(G.cyl(0.155, 0.155, 0.028, d.color, 22), 0, 0, 0, Math.PI / 2, 0, 0));
+            parts.push(G.at(G.torus(0.118, 0.010, d.dark), 0, 0, 0.016, 0, 0, 0));
+            parts.push(G.at(G.torus(0.118, 0.010, d.dark), 0, 0, -0.016, 0, 0, 0));
+            // 方孔
+            parts.push(G.at(G.box(0.055, 0.055, 0.034, '#3A2A08'), 0, 0, 0));
+            parts.push(G.at(G.box(0.062, 0.008, 0.036, d.dark), 0, 0.073, 0));
+            parts.push(G.at(G.box(0.062, 0.008, 0.036, d.dark), 0, -0.073, 0));
             break;
         }
+
+        /* 玉玺：螭虎钮 + 印台 + 朱砂印面 */
         case 'jade': {
-            // 玉玺：螭虎钮 + 印台 + 朱砂印面
-            ctx.beginPath();
-            ctx.moveTo(-4.2, -5.5);
-            ctx.quadraticCurveTo(-5.4, -13.5, 0, -13.5);
-            ctx.quadraticCurveTo(5.4, -13.5, 4.2, -5.5);
-            ctx.closePath();
-            ctx.fillStyle = d.color; ctx.fill(); stroke(1.6);
-            ctx.beginPath(); ctx.arc(0, -10.6, 1.7, 0, TAU);
-            ctx.fillStyle = '#123840'; ctx.fill();
-            ctx.strokeStyle = U.rgba('#0A2A31', 0.7); ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(-3.2, -7.6); ctx.quadraticCurveTo(0, -6.4, 3.2, -7.6); ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(-9.5, -5.5); ctx.lineTo(9.5, -5.5);
-            ctx.lineTo(8, 7.5); ctx.lineTo(-8, 7.5);
-            ctx.closePath();
-            ctx.fillStyle = d.color; ctx.fill(); stroke(1.8);
+            parts.push(G.at(G.box(0.30, 0.16, 0.26, d.color), 0, -0.05, 0));
+            parts.push(G.at(G.box(0.306, 0.045, 0.266, '#C62828'), 0, -0.125, 0));
+            // 螭虎钮
+            parts.push(G.at(G.box(0.16, 0.09, 0.13, d.color), 0, 0.06, 0));
+            parts.push(G.at(G.sphere(0.072, d.color, 12, 9, 1.15, 0.9, 1), 0.02, 0.12, 0));
+            parts.push(G.at(G.cone(0.026, 0.07, d.color, 6), -0.055, 0.13, 0, 0, 0, 0.4));
+            parts.push(G.at(G.cone(0.026, 0.07, d.color, 6), 0.085, 0.13, 0, 0, 0, -0.4));
             // 印面朱砂
-            ctx.fillStyle = '#C62828';
-            ctx.fillRect(-8, 2.5, 16, 5);
-            ctx.lineWidth = 1; ctx.strokeStyle = OUT; ctx.strokeRect(-8, 2.5, 16, 5);
-            ctx.beginPath();
-            ctx.moveTo(-9, -4); ctx.lineTo(-7.6, 6.4); ctx.lineTo(-5.4, 6.4); ctx.lineTo(-6.8, -4);
-            ctx.closePath();
-            ctx.fillStyle = U.rgba('#FFFFFF', 0.35); ctx.fill();
+            parts.push(G.at(G.plane(0.24, 0.18, '#B71C1C'), 0, -0.152, 0, -Math.PI / 2, 0, 0));
             break;
         }
+
+        /* 兵书：三国书于竹简，以麻绳编联 */
         case 'scroll': {
-            // 兵书：三国时期书于竹简，以麻绳编联，而非后世纸卷
-            const N = 6, sw = 4, gap = 0.9;
+            const N = 6;
             for (let i = 0; i < N; i++) {
-                const x = -12 + i * (sw + gap);
-                ctx.fillStyle = i % 2 ? '#E0BC7C' : '#CBA35C';
-                U.roundRect(ctx, x, -8.5, sw, 17, 1); ctx.fill();
-                ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(70,48,18,0.65)'; ctx.stroke();
-                // 墨字
-                ctx.fillStyle = 'rgba(40,28,14,0.75)';
-                for (let j = 0; j < 3; j++) ctx.fillRect(x + 1.1, -5.5 + j * 4.4, sw - 2.2, 1.1);
+                const x = -0.135 + i * 0.054;
+                parts.push(G.at(G.box(0.044, 0.27, 0.032, i % 2 ? '#E0BC7C' : '#CBA35C'), x, 0, 0));
+                for (let j = 0; j < 3; j++) {
+                    parts.push(G.at(G.box(0.028, 0.012, 0.006, '#2B1B12'), x, 0.055 - j * 0.055, 0.019));
+                }
             }
-            // 编绳两道 + 绳头
-            ctx.strokeStyle = '#4E342E'; ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.moveTo(-12.5, -4.2); ctx.lineTo(18, -4.2);
-            ctx.moveTo(-12.5, 4.2); ctx.lineTo(18, 4.2);
-            ctx.stroke();
-            ctx.strokeStyle = '#7A5A3A'; ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(16, -4.2); ctx.quadraticCurveTo(19.5, -2, 18.5, 1);
-            ctx.moveTo(16, 4.2); ctx.quadraticCurveTo(19.5, 6.4, 18.5, 3.4);
-            ctx.stroke();
+            // 编绳两道
+            parts.push(G.at(G.box(0.34, 0.014, 0.042, '#4E342E'), 0, 0.072, 0));
+            parts.push(G.at(G.box(0.34, 0.014, 0.042, '#4E342E'), 0, -0.072, 0));
             break;
         }
     }
+
+    // 竹简上的墨痕需要深色而不是透明，单独刷一遍顶点色
+    return G.merge(parts);
 }
 
-/** 图标精灵缓存：图标是静态的，逐帧重画十余条路径在软件光栅化下要吃掉约 4 FPS */
-const ITEM_SPRITE = {};
-function itemSprite(d) {
-    let sp = ITEM_SPRITE[d.icon];
-    if (sp) return sp;
-    const S = 4, N = 160;
-    sp = document.createElement('canvas');
-    sp.width = N; sp.height = N;
-    const c = sp.getContext('2d');
-    c.translate(N / 2, N / 2);
-    c.scale(S, S);
-    drawItemIcon(c, d);
-    ITEM_SPRITE[d.icon] = sp;
-    return sp;
+/** 每种道具共享的几何/材质缓存 */
+const ITEM_ASSETS = {};
+function itemAsset(kind) {
+    let a = ITEM_ASSETS[kind];
+    if (a) return a;
+    const d = ITEM_KINDS[kind] || ITEM_KINDS.gold;
+    a = ITEM_ASSETS[kind] = {
+        geo: buildItemGeometry(d),
+        mat: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TK.gradient }),
+        shadowGeo: new THREE.PlaneGeometry(1, 1),
+        shadowMat: new THREE.MeshBasicMaterial({
+            map: softShadowTex(), transparent: true, opacity: 0.7, depthWrite: false
+        })
+    };
+    return a;
 }
 
-/** 外发光同样烘焙：每帧 createRadialGradient 是每个道具一次，数量一多就明显拖帧 */
-const ITEM_GLOW = {};
-function itemGlow(d) {
-    let sp = ITEM_GLOW[d.icon];
-    if (sp) return sp;
-    const S = 4, N = 160;
-    sp = document.createElement('canvas');
-    sp.width = N; sp.height = N;
-    const c = sp.getContext('2d');
-    c.translate(N / 2, N / 2);
-    c.scale(S, S);
-    const grd = c.createRadialGradient(0, 0, 2, 0, 0, 26);
-    grd.addColorStop(0, U.rgba(d.color, 0.9));
-    grd.addColorStop(1, U.rgba(d.color, 0));
-    c.fillStyle = grd;
-    c.beginPath(); c.arc(0, 0, 26, 0, TAU); c.fill();
-    ITEM_GLOW[d.icon] = sp;
-    return sp;
-}
-
+/* ============================================================
+ * Item
+ * ========================================================== */
 class Item {
     constructor(game, cfg) {
         this.game = game;
@@ -219,11 +174,36 @@ class Item {
         this.maxLife = 22;
         this.grounded = false;
         this.magnet = 0;
+
+        const A = itemAsset(this.kindKey);
+        this.group = new THREE.Group();
+        this.mesh = new THREE.Mesh(A.geo, A.mat);
+        this.mesh.add(new THREE.Mesh(A.geo, TK.mat.outline()));
+        this.group.add(this.mesh);
+
+        // 外发光：替代原 2D 精灵的径向光晕，同时是暗场地上的可读性保障
+        this.halo = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: TK.glowTex(),
+            color: new THREE.Color(this.def.color),
+            transparent: true, opacity: 0.5, depthWrite: false,
+            blending: THREE.AdditiveBlending
+        }));
+        this.halo.scale.setScalar(0.72);
+        this.group.add(this.halo);
+
+        this.shadow = new THREE.Mesh(A.shadowGeo, A.shadowMat);
+        this.shadow.rotation.x = -Math.PI / 2;
+        this.shadow.position.set(this.x, 0.012, this.z);
+
+        const scene = game.stage.scene;
+        scene.add(this.group);
+        scene.add(this.shadow);
+        this._sync(0);
     }
 
     update(dt) {
         this.t += dt; this.life += dt;
-        if (this.life > this.maxLife) { this.dead = true; return; }
+        if (this.life > this.maxLife) { this.dispose(); return; }
 
         if (!this.grounded) {
             this.vy -= GRAVITY * 0.55 * dt;
@@ -247,61 +227,104 @@ class Item {
             }
             if (Math.abs(p.x - this.x) < 0.55 && Math.abs(p.z - this.z) < 0.5 && Math.abs(p.y - this.y) < 1.3) {
                 this.pickup(p);
+                return;
             }
         }
+        this._sync(dt);
+    }
+
+    _sync(dt) {
+        const bob = this.grounded ? Math.abs(Math.sin(this.t * 3)) * 0.06 : 0;
+        this.group.position.set(this.x, this.y + 0.30 + bob, this.z);
+        this.group.rotation.y = this.t * 1.5;
+
+        const glow = 0.40 + Math.sin(this.t * 5) * 0.16;
+        this.halo.material.opacity = glow;
+        this.halo.scale.setScalar(0.70 + Math.sin(this.t * 4) * 0.05);
+
+        const k = 1 - U.clamp(this.y / 3, 0, 1) * 0.45;
+        this.shadow.position.set(this.x, 0.012, this.z);
+        this.shadow.scale.set(0.62 * k, 0.62 * k, 1);
+        this.shadow.material.opacity = 0.62 * k;
+
+        // 临期闪烁
+        const blink = this.life > this.maxLife - 4 && Math.floor(this.life * 8) % 2 === 0;
+        this.group.visible = !blink;
     }
 
     pickup(p) {
         const g = this.game, d = this.def;
-        this.dead = true;
         g.audio.play(d.heal ? 'heal' : (d.rage ? 'skill' : 'coin'));
-        if (d.heal) { p.heal(d.heal); g.fx.text(p.sx(g.cam), p.cy(g.cam) - 30, '+' + d.heal, '#7CFC75', 20); }
-        if (d.rage) { p.addRage(d.rage); g.fx.text(p.sx(g.cam), p.cy(g.cam) - 30, '怒气 +' + d.rage, '#FFD166', 19); }
-        if (d.score) { p.score += d.score; g.fx.text(p.sx(g.cam), p.cy(g.cam) - 52, '+' + d.score, '#FFD700', 16); }
-        g.fx.spawn({
-            x: this.x0(), y: this.y0(), vx: 0, vy: -60, g: 0, r: 26, life: 0, max: 0.4,
-            color: d.color, glow: true, shrink: false
-        });
-        for (let i = 0; i < 10; i++) {
-            g.fx.spawn({
-                x: this.x0(), y: this.y0(), vx: U.rand(-90, 90), vy: U.rand(-160, -40),
-                g: 500, r: U.rand(2, 4), life: 0, max: 0.5, color: d.color, glow: true
-            });
-        }
+        const pos = { x: this.x, y: this.y + 0.55, z: this.z };
+        if (d.heal) g.fx.text({ x: this.x, y: pos.y + 0.35, z: this.z }, '+' + d.heal, '#7CFC75', 20);
+        if (d.rage) g.fx.text({ x: this.x, y: pos.y + 0.35, z: this.z }, '怒气 +' + d.rage, '#FFD166', 19);
+        if (d.score) g.fx.text({ x: this.x, y: pos.y + 0.72, z: this.z }, '+' + d.score, '#FFD700', 16);
+        g.fx.wave({ x: this.x, y: 0, z: this.z }, 55, d.color, 0.42, 4);
+        g.fx.dust(pos, 10, d.color);
+        this.dispose();
         g.onItemPicked(this, p);
     }
 
-    x0() { return VIEW.W / 2 + (this.x - this.game.cam.x) * PPM; }
-    y0() { return screenY(this.z) - this.y * PPM * depthScale(this.z); }
-
-    draw(ctx) {
-        const k = depthScale(this.z);
-        const bob = this.grounded ? Math.abs(Math.sin(this.t * 3)) * 5 : 0;
-        const x = this.x0(), y = this.y0() - bob;
-        const d = this.def;
-        const blink = this.life > this.maxLife - 4 && Math.floor(this.life * 8) % 2 === 0;
-
-        ctx.save();
-        // 阴影
-        Fig.shadow(ctx, this.x0(), screenY(this.z), 11 * k, 0.28, 1);
-        if (blink) { ctx.restore(); return; }
-
-        ctx.translate(x, y);
-        ctx.scale(k, k);
-        const glow = 0.35 + Math.sin(this.t * 5) * 0.2;
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = glow * 0.5;
-        ctx.drawImage(itemGlow(d), -20, -20, 40, 40);
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1;
-
-        // 图标已烘焙为精灵，逐帧只做一次 drawImage
-        ctx.drawImage(itemSprite(d), -20, -20, 40, 40);
-        ctx.restore();
+    dispose() {
+        if (this.dead) return;
+        this.dead = true;
+        const scene = this.game.stage.scene;
+        scene.remove(this.group);
+        scene.remove(this.shadow);
+        this.halo.material.dispose();
+        // 几何与基础材质为同类道具共享，此处不释放
     }
 }
 
-/** 木箱 / 陶罐：击碎后掉落 */
+/* ============================================================
+ * 木箱 / 陶罐：击碎后掉落
+ * ========================================================== */
+function buildBreakableGeometry(kind) {
+    const parts = [];
+    if (kind === 'crate') {
+        // 粮草辎重箱：箱板竖纹 + 麻绳十字捆绑 + 朱色封条
+        parts.push(G.at(G.box(0.64, 0.56, 0.52, '#A9793F'), 0, 0.28, 0));
+        for (const x of [-0.21, 0, 0.21]) {
+            parts.push(G.at(G.box(0.085, 0.56, 0.535, '#8E6330'), x, 0.28, 0));
+        }
+        parts.push(G.at(G.box(0.65, 0.05, 0.53, '#C7A96A'), 0, 0.44, 0));
+        parts.push(G.at(G.box(0.65, 0.05, 0.53, '#C7A96A'), 0, 0.13, 0));
+        parts.push(G.at(G.box(0.07, 0.57, 0.54, '#C7A96A'), 0, 0.28, 0));
+        // 封条
+        parts.push(G.at(G.box(0.16, 0.24, 0.012, '#B71C1C'), 0, 0.30, 0.268));
+        parts.push(G.at(G.box(0.66, 0.06, 0.06, '#6B4A2F'), 0, 0.02, 0));
+    } else {
+        // 灰陶酒坛：鼓腹 + 双系耳 + 红布封口
+        parts.push(G.lathe([
+            [0.001, 0.00], [0.19, 0.005], [0.25, 0.12], [0.27, 0.28],
+            [0.235, 0.44], [0.14, 0.52], [0.12, 0.57], [0.135, 0.60], [0.001, 0.60]
+        ], '#9E8E77', 18));
+        // 肩部双系耳
+        for (const s of [-1, 1]) {
+            parts.push(G.at(G.torus(0.055, 0.016, '#9E8E77', Math.PI * 0.9),
+                s * 0.255, 0.44, 0, Math.PI / 2, 0, s > 0 ? 0.4 : Math.PI - 0.4));
+        }
+        parts.push(G.at(G.cyl(0.145, 0.16, 0.05, '#B71C1C', 14), 0, 0.605, 0));
+        parts.push(G.at(G.torus(0.155, 0.014, '#C7A96A'), 0, 0.575, 0, Math.PI / 2, 0, 0));
+    }
+    return G.merge(parts);
+}
+
+const BREAK_ASSETS = {};
+function breakAsset(kind) {
+    let a = BREAK_ASSETS[kind];
+    if (a) return a;
+    a = BREAK_ASSETS[kind] = {
+        geo: buildBreakableGeometry(kind),
+        mat: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TK.gradient }),
+        shadowGeo: new THREE.PlaneGeometry(1, 1),
+        shadowMat: new THREE.MeshBasicMaterial({
+            map: softShadowTex(), transparent: true, opacity: 0.55, depthWrite: false
+        })
+    };
+    return a;
+}
+
 class Breakable {
     constructor(game, cfg) {
         this.game = game;
@@ -313,94 +336,44 @@ class Breakable {
         this.hit = 0;
         this.drop = cfg.drop || null;
         this.drawY = 0;
+
+        const A = breakAsset(this.kind);
+        this.group = new THREE.Group();
+        this.mesh = new THREE.Mesh(A.geo, A.mat);
+        this.mesh.add(new THREE.Mesh(A.geo, TK.mat.outline()));
+        this.group.add(this.mesh);
+        this.group.position.set(this.x, 0, this.z);
+        this.group.rotation.y = U.rand(-0.18, 0.18);
+
+        this.shadow = new THREE.Mesh(A.shadowGeo, A.shadowMat);
+        this.shadow.rotation.x = -Math.PI / 2;
+        this.shadow.position.set(this.x, 0.012, this.z);
+        this.shadow.scale.set(this.kind === 'crate' ? 1.0 : 0.78, this.kind === 'crate' ? 0.85 : 0.72, 1);
+
+        const scene = game.stage.scene;
+        scene.add(this.group);
+        scene.add(this.shadow);
     }
 
     takeHit() {
+        if (this.dead) return false;
         const g = this.game;
-        this.dead = true;
         g.audio.play('ko', { volume: 0.4 });
-        const sx = VIEW.W / 2 + (this.x - g.cam.x) * PPM, sy = screenY(this.z);
-        g.fx.dust(sx, sy, 14, this.kind === 'crate' ? '#A9793F' : '#B0A99A');
+        const pos = { x: this.x, y: 0.4, z: this.z };
+        g.fx.dust(pos, 16, this.kind === 'crate' ? '#A9793F' : '#B0A99A');
+        g.fx.fireBurst({ x: this.x, y: 0.3, z: this.z }, 6, 0.5);
         g.fx.addShake(3);
         if (this.drop) g.dropItem(this.drop, this.x, this.z);
         else if (U.chance(0.55)) g.dropItem(U.pick(['baozi', 'gold', 'wine', 'gold']), this.x, this.z);
+        this.dispose();
         return true;
     }
 
-    draw(ctx) {
-        const k = depthScale(this.z);
-        const x = VIEW.W / 2 + (this.x - this.game.cam.x) * PPM;
-        const y = screenY(this.z);
-        ctx.save();
-        Fig.shadow(ctx, x, y, 18 * k, 0.3, 1);
-        ctx.translate(x, y);
-        ctx.scale(k, k);
-        const OUT = '#2B1B12';
-        if (this.kind === 'crate') {
-            // 粮草辎重箱：箱板竖纹 + 麻绳十字捆绑 + 朱色封条
-            ctx.fillStyle = '#A9793F';
-            ctx.fillRect(-16, -30, 32, 30);
-            ctx.lineWidth = 2.4; ctx.strokeStyle = OUT;
-            ctx.strokeRect(-16, -30, 32, 30);
-            ctx.strokeStyle = 'rgba(90,60,24,0.45)'; ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.moveTo(-5.5, -30); ctx.lineTo(-5.5, 0);
-            ctx.moveTo(5.5, -30); ctx.lineTo(5.5, 0);
-            ctx.stroke();
-            ctx.strokeStyle = U.rgba('#FFFFFF', 0.18); ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(-13, -27); ctx.lineTo(13, -27); ctx.stroke();
-            // 麻绳：两横一纵，深色描边压出绳股
-            const rope = (w, col) => {
-                ctx.strokeStyle = col; ctx.lineWidth = w;
-                ctx.beginPath();
-                ctx.moveTo(-16, -22); ctx.lineTo(16, -22);
-                ctx.moveTo(-16, -8); ctx.lineTo(16, -8);
-                ctx.moveTo(0, -30); ctx.lineTo(0, 0);
-                ctx.stroke();
-            };
-            rope(3.2, '#C7A96A');
-            rope(1.1, 'rgba(70,48,18,0.55)');
-            // 封条
-            ctx.fillStyle = '#B71C1C';
-            ctx.fillRect(-4.5, -19, 9, 13);
-            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(60,10,10,0.55)';
-            ctx.strokeRect(-4.5, -19, 9, 13);
-        } else {
-            // 灰陶酒坛：双系耳 + 红布封口
-            ctx.beginPath();
-            ctx.moveTo(-13, 0); ctx.quadraticCurveTo(-16, -18, -8, -25);
-            ctx.lineTo(8, -25); ctx.quadraticCurveTo(16, -18, 13, 0);
-            ctx.closePath();
-            ctx.fillStyle = '#9E8E77'; ctx.fill();
-            ctx.lineWidth = 2.2; ctx.strokeStyle = OUT; ctx.stroke();
-            // 肩部双系耳
-            ctx.strokeStyle = OUT; ctx.lineWidth = 2;
-            [-1, 1].forEach((d) => {
-                ctx.beginPath();
-                ctx.arc(d * 13.5, -18, 4,
-                    d > 0 ? -Math.PI * 0.5 : Math.PI * 0.5,
-                    d > 0 ? Math.PI * 0.7 : Math.PI * 1.5, false);
-                ctx.stroke();
-            });
-            ctx.strokeStyle = U.rgba('#FFFFFF', 0.16); ctx.lineWidth = 2.4;
-            ctx.beginPath(); ctx.moveTo(-8, -18); ctx.lineTo(-6, -4); ctx.stroke();
-            // 封口红布：坛口盖布 + 两侧垂角
-            ctx.fillStyle = '#B71C1C';
-            ctx.beginPath();
-            ctx.moveTo(-9, -26); ctx.quadraticCurveTo(-13, -19, -8, -16);
-            ctx.lineTo(-4, -25); ctx.closePath(); ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(9, -26); ctx.quadraticCurveTo(13, -19, 8, -16);
-            ctx.lineTo(4, -25); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#8B0000';
-            ctx.beginPath(); ctx.ellipse(0, -25.5, 9.5, 4.2, 0, 0, TAU); ctx.fill();
-            ctx.lineWidth = 1.8; ctx.strokeStyle = OUT; ctx.stroke();
-            // 扎绳
-            ctx.strokeStyle = '#C7A96A'; ctx.lineWidth = 2.2;
-            ctx.beginPath();
-            ctx.moveTo(-9.5, -23.5); ctx.quadraticCurveTo(0, -22, 9.5, -23.5);
-            ctx.stroke();
-        }
-        ctx.restore();
+    dispose() {
+        if (this.dead) return;
+        this.dead = true;
+        const scene = this.game.stage.scene;
+        scene.remove(this.group);
+        scene.remove(this.shadow);
     }
 }

@@ -1,6 +1,10 @@
 /* ============================================================
- * 三国战纪 · 主程序
+ * 三国战纪 · 主程序（three.js 版）
  * 流程：标题 → 选人 → 关卡开场 → 战斗（波次推进 / BOSS）→ 结算
+ *
+ * 渲染分两层：
+ *   #gameCanvas  WebGL —— 3D 世界、角色、特效
+ *   #uiCanvas    2D     —— HUD、菜单、伤害数字、闪白
  * ============================================================ */
 'use strict';
 
@@ -11,11 +15,11 @@ const ST = {
 };
 
 class Game {
-    constructor(canvas) {
+    constructor(canvas, uiCanvas) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        this.ctx.imageSmoothingEnabled = true;
-        this.renderScale = 1;
+        this.uiCanvas = uiCanvas;
+        this.ctx = uiCanvas.getContext('2d');
+        this.uiScale = 1;
 
         /** 最高战功（localStorage 持久化）；file:// 或隐私模式下可能不可用 */
         this.bestScore = Game.loadBest();
@@ -23,7 +27,9 @@ class Game {
 
         this.input = new InputManager();
         this.audio = new AudioEngine();
-        this.fx = new FX();
+
+        this.stage = new Stage(canvas);
+        this.fx = new FX3D(this.stage);
         this.ui = new UI(this);
 
         this.state = ST.TITLE;
@@ -31,13 +37,14 @@ class Game {
         this.selectIndex = 0;
         this.pauseIndex = 0;
 
-        this.cam = { x: 0, y: 0 };
+        this.cam = { x: 10 };
         this.actors = [];
         this.projectiles = [];
         this.items = [];
         this.breakables = [];
         this.timers = [];
         this.spawnQueue = [];
+        this.showcase = [];
 
         this.arena = { min: 0.8, max: 20 };
         this.softArena = { min: 0, max: 40 };
@@ -46,7 +53,7 @@ class Game {
 
         this.levelIndex = 0;
         this.level = LEVELS[0];
-        this.scene = makeScene(this.level.theme);
+        this.world = null;
         this.gateIndex = 0;
         this.waveState = 'open';
         this.boss = null;
@@ -58,6 +65,7 @@ class Game {
         this.introT = 0;
         this.resultT = 0;
         this.clearT = 0;
+        this.t = 0;
         this.fade = 0;
         this.fadeTarget = 0;
         this.pending = null;
@@ -66,10 +74,12 @@ class Game {
         this.playTime = 0;
 
         this._last = performance.now();
-        this._acc = 0;
         this._bindGlobal();
         this._fitCanvas();
         window.addEventListener('resize', () => this._fitCanvas());
+
+        this._setWorld(this.level);
+        this._enterTitle();
     }
 
     /* ---------------- 最高战功持久化 ---------------- */
@@ -97,54 +107,45 @@ class Game {
 
     /* ---------------- 画布自适应 ---------------- */
     _fitCanvas() {
-        const c = this.canvas;
         const pad = 24;
         const aw = window.innerWidth - pad * 2;
         const ah = window.innerHeight - pad * 2 - 40;
-        const s = Math.max(0.5, Math.min(aw / VIEW.W, ah / VIEW.H));
-        c.style.width = Math.round(VIEW.W * s) + 'px';
-        c.style.height = Math.round(VIEW.H * s) + 'px';
+        const s = Math.max(0.4, Math.min(aw / VIEW.W, ah / VIEW.H));
+        const cw = Math.round(VIEW.W * s), ch = Math.round(VIEW.H * s);
 
-        // 后备缓冲倍率。
-        // 重要：这里刻意不让缓冲跟随任意缩放比。实测表明，非整数倍的
-        // ctx.scale() 会让每帧的每一次绘制都走慢速光栅化路径——在软件渲染
-        // 环境（--disable-gpu / 虚拟机 / 远程桌面 / 低端机）下帧率会从 55 FPS
-        // 掉到 8 FPS，相差近 7 倍。
-        // 因此策略为：默认 1:1 绘制（快速路径），仅当放大显著或高分屏时才
-        // 提升到 2×（此时用户通常有大屏且带 GPU 加速，代价可承受），
-        // 并在运行期监测到持续低帧率时自动降级回 1×。
+        this.canvas.style.width = cw + 'px';
+        this.canvas.style.height = ch + 'px';
+        this.uiCanvas.style.width = cw + 'px';
+        this.uiCanvas.style.height = ch + 'px';
+        this.stage.resize(cw, ch);
+
+        // UI 覆盖层：2D 绘制很便宜，高分屏下用 2× 后备缓冲保证文字锐利
         const dpr = window.devicePixelRatio || 1;
-        const want = s * dpr;
-        let r = 1;
-        if (!this._perfCapped && want >= 1.75) r = 2;
-        const bw = Math.round(VIEW.W * r), bh = Math.round(VIEW.H * r);
-        this.renderScale = r;
-        if (c.width !== bw || c.height !== bh) {
-            c.width = bw; c.height = bh;
-            // 改变尺寸会重置上下文状态，这里恢复需要的绘制属性
-            this.ctx.imageSmoothingEnabled = true;
-            this.ctx.imageSmoothingQuality = 'high';
+        const r = this._lowQ ? 1 : (dpr >= 1.5 ? 2 : 1);
+        this.uiScale = r;
+        const bw = VIEW.W * r, bh = VIEW.H * r;
+        if (this.uiCanvas.width !== bw || this.uiCanvas.height !== bh) {
+            this.uiCanvas.width = bw;
+            this.uiCanvas.height = bh;
         }
     }
 
     /**
-     * 运行期性能监测：连续两个 1.5s 采样窗口在战斗状态下低于 48 FPS，
-     * 就把后备缓冲从 2× 降回 1×（降级后不再回升，避免反复抖动）。
-     * 传入的是未经钳制的真实帧间隔，否则 dt 上限会把低帧率"美化"成 20 FPS。
+     * 运行期性能监测：连续两个 1.5s 采样窗口在战斗状态下低于 46 FPS，
+     * 就把 WebGL 的像素比降到 1×（降级后不再回升，避免反复抖动）。
      */
     _monitorPerf(rawDt) {
-        if (this._perfCapped) return;
-        if ((this.renderScale || 1) <= 1) return;
+        if (this._lowQ) return;
         const m = this._perf || (this._perf = { t: 0, n: 0, bad: 0 });
         m.t += rawDt;
         m.n++;
         if (m.t < 1.5) return;
         const fps = m.n / m.t;
-        // 只在战斗态判定：标题/暂停等静态画面帧率低不代表渲染压力
-        if (this.state === ST.PLAY) m.bad = fps < 48 ? m.bad + 1 : 0;
+        if (this.state === ST.PLAY) m.bad = fps < 46 ? m.bad + 1 : 0;
         m.t = 0; m.n = 0;
         if (m.bad >= 2) {
-            this._perfCapped = true;
+            this._lowQ = true;
+            this.stage.dprCap = 1;
             this._fitCanvas();
         }
     }
@@ -181,6 +182,116 @@ class Game {
     }
 
     /* ============================================================
+     * 场景 / 展示台
+     * ========================================================== */
+    _setWorld(level) {
+        if (this.world) {
+            this.stage.scene.remove(this.world.root);
+            this._disposeObject(this.world.root);
+            this.world = null;
+        }
+        this.stage.setPalette(level.palette);
+        this.world = World.create(level);
+        this.stage.scene.add(this.world.root);
+    }
+
+    _disposeObject(root) {
+        root.traverse((o) => {
+            if (o.geometry && o.geometry.dispose) o.geometry.dispose();
+            const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+            for (const m of mats) {
+                // 贴图可能是模块级共享（如色阶、光晕），这里只释放材质本身
+                if (m.dispose) m.dispose();
+            }
+        });
+    }
+
+    /** 标题/选人时站在场景里的 3D 武将 */
+    _setShowcase(keys) {
+        this._clearShowcase();
+        this.showcase = keys.map((key, i) => {
+            const look = LOOKS[key];
+            const rig = Chibi.create(key, look);
+            rig.attach(this.stage.scene);
+            const a = {
+                look, key,
+                x: this.cam.x + (i - (keys.length - 1) / 2) * 1.55,
+                y: 0, z: 1.8,
+                facing: 1,
+                state: 'idle', stateT: U.rand(0, 1.2), animT: U.rand(0, 4),
+                time: U.rand(0, 6), vy: 0,
+                dead: false, remove: false, flash: 0, invuln: 0, fade: 1,
+                atkDef: null, skillDef: null, current: null
+            };
+            return { key, rig, a };
+        });
+    }
+
+    _clearShowcase() {
+        for (const h of this.showcase) {
+            h.rig.detach(this.stage.scene);
+            h.rig.dispose();
+        }
+        this.showcase.length = 0;
+    }
+
+    _updateShowcase(dt) {
+        for (const h of this.showcase) {
+            const a = h.a;
+            a.time += dt;
+            a.animT += dt;
+            a.stateT += dt;
+            h.rig.update(a, dt);
+        }
+    }
+
+    _enterTitle() {
+        this.state = ST.TITLE;
+        this.titleIndex = 0;
+        this.t = 0;
+        this.cam.x = 12;
+        this._setShowcase(['guanyu']);
+        this.input.flush();
+    }
+
+    _enterSelect() {
+        this.state = ST.SELECT;
+        this._setShowcase(Object.keys(HERO_KIT));
+        const list = this.showcase;
+        for (let i = 0; i < list.length; i++) {
+            const sel = i === this.selectIndex;
+            list[i].a.x = this.cam.x + (i - 2) * 1.55;
+            list[i].a.z = sel ? 2.45 : 1.55;
+        }
+        this.input.flush();
+    }
+
+    _layoutSelect(dt) {
+        const cx = this.cam.x;
+        for (let i = 0; i < this.showcase.length; i++) {
+            const h = this.showcase[i], a = h.a;
+            const sel = i === this.selectIndex;
+            a.x = U.damp(a.x, cx + (i - 2) * 1.50, 7, dt);
+            a.z = U.damp(a.z, sel ? 1.55 : 0.75, 6, dt);
+            a.facing = 1;
+            h.rig.root.scale.setScalar(sel ? 1.06 : 1.0);
+        }
+    }
+
+    returnToTitle() {
+        this._clearShowcase();
+        this._disposeLevel();
+        this.levelIndex = 0;
+        this.level = LEVELS[0];
+        this._setWorld(this.level);
+        this.player = null;
+        this.boss = null;
+        this.bossActive = false;
+        this._enterTitle();
+        this.audio.playMusic(null);
+    }
+
+    /* ============================================================
      * 流程控制
      * ========================================================== */
     levelName() {
@@ -198,25 +309,40 @@ class Game {
         this.loadLevel(0);
     }
 
+    _disposeActor(a) {
+        if (!a || a._disposed) return;
+        a._disposed = true;
+        if (a.dispose) a.dispose();
+    }
+
+    /** 清空当前关卡的所有实体（3D 对象必须显式移出场景并释放） */
+    _disposeLevel() {
+        for (const a of this.actors) this._disposeActor(a);
+        this.actors.length = 0;
+        for (const p of this.projectiles) if (p._kill) p._kill();
+        this.projectiles.length = 0;
+        for (const it of this.items) it.dispose();
+        this.items.length = 0;
+        for (const b of this.breakables) b.dispose();
+        this.breakables.length = 0;
+        this.timers.length = 0;
+        this.spawnQueue.length = 0;
+        this.tokenHolders.length = 0;
+        this.boss = null;
+        this.bossActive = false;
+        this.fx.clear();
+    }
+
     loadLevel(i) {
         this.levelIndex = i;
         this.level = LEVELS[i];
         const S = LEVEL_SCALE[Math.min(i, LEVEL_SCALE.length - 1)];
         this.scaleHp = S.hp; this.scaleAtk = S.atk; this.maxTokens = S.tokens;
 
-        this.scene = makeScene(this.level.theme);
-        this.actors.length = 0;
-        this.projectiles.length = 0;
-        this.items.length = 0;
-        this.breakables.length = 0;
-        this.timers.length = 0;
-        this.tokenHolders.length = 0;
-        // 必须清空：updateWorld 会无视 waveState 继续吐刷怪队列，上一波残留的
-        // 敌人会以旧闸门坐标复活，并拖住新波的 clearWave 判定
-        this.spawnQueue.length = 0;
-        this.fx.clear();
-        this.boss = null;
-        this.bossActive = false;
+        this._clearShowcase();
+        this._disposeLevel();
+        this._setWorld(this.level);
+
         this.gateIndex = 0;
         this.waveState = 'open';
         this.killCount = this.killCount || 0;
@@ -238,7 +364,8 @@ class Game {
             this.breakables.push(new Breakable(this, { kind: pr.k, x: pr.x, z: pr.z, drop: pr.drop }));
         }
 
-        this.cam.x = Math.max(VIEW.W / 2 / PPM, Math.min(p.x, this.level.length - VIEW.W / 2 / PPM));
+        const half = CAM.halfW;
+        this.cam.x = U.clamp(p.x, half, Math.max(half, this.level.length - half));
         this.arena = { min: 0.8, max: this.level.waves[0].at };
         this.softArena = { min: 0, max: this.level.length };
 
@@ -342,7 +469,6 @@ class Game {
         // 掉落奖励
         const kind = U.pick(['baozi', 'gold', 'wine', 'baozi', 'roast']);
         this.dropItem(kind, p.x + 1.2, U.clamp(p.z, 0.6, 3.0));
-        // 补充箭塔式提示
         this.timers.push({ t: 0.9, fn: () => { if (this.waveState === 'clear') this.waveState = 'open'; } });
     }
 
@@ -353,7 +479,9 @@ class Game {
         this.gateX = b.at;
         this.arena = { min: Math.max(0.8, b.at - 7.2), max: Math.min(b.at + 7.2, this.level.length - 0.8) };
         this.softArena = { min: b.at - 8.5, max: b.at + 8.5 };
-        const boss = new Boss(this, { look: b.type, x: b.at + 5.0, z: 1.9, facing: -1, lockX: b.at });
+        // 入场位置不能超出关卡右界，否则 BOSS 会贴着屏幕右缘只露半个身子
+        const spawnX = Math.min(b.at + 3.4, this.level.length - 1.2);
+        const boss = new Boss(this, { look: b.type, x: spawnX, z: 1.9, facing: -1, lockX: b.at });
         this.boss = boss;
         this.actors.push(boss);
         this.audio.playMusic('boss');
@@ -362,7 +490,6 @@ class Game {
     }
 
     onBossReady(boss) {
-        // BOSS 入场语音；BOSS 名称已在 startBoss 的 showWave 中展示，避免重复
         this.audio.play('bossRoar');
     }
 
@@ -494,12 +621,27 @@ class Game {
         this.handleStateKeys();
 
         switch (this.state) {
-            case ST.TITLE: this.updateTitle(dt); this.fx.update(dt); break;
-            case ST.HELP: this.scene.update(dt, this.cam.x * PPM); this.fx.update(dt); break;
-            case ST.SELECT: this.updateSelect(dt); this.fx.update(dt); break;
+            case ST.TITLE:
+                this.t += dt;
+                this.cam.x = 12 + Math.sin(this.t * 0.12) * 3.2;
+                if (this.showcase[0]) this.showcase[0].a.x = this.cam.x + 2.62;
+                this._updateShowcase(dt);
+                this.world.update(dt, this.cam.x);
+                this.fx.update(dt);
+                break;
+            case ST.HELP:
+                this.world.update(dt, this.cam.x);
+                this.fx.update(dt);
+                break;
+            case ST.SELECT:
+                this._layoutSelect(dt);
+                this._updateShowcase(dt);
+                this.world.update(dt, this.cam.x);
+                this.fx.update(dt);
+                break;
             case ST.INTRO:
                 this.introT += dt;
-                this.scene.update(dt, this.cam.x * PPM);
+                this.world.update(dt, this.cam.x);
                 this.fx.update(dt);
                 if (this.introT > 3.2 || this.input.justPressed('start')) {
                     this.state = ST.PLAY; this.input.flush();
@@ -516,16 +658,17 @@ class Game {
                 this.resultT += dt;
                 this.fx.update(dt * 0.6);
                 if (this.resultT > 0.6) {
-                    if (this.input.justPressed('start')) { this.state = ST.TITLE; this.input.flush(); }
-                    if (this.input.justPressed('pause')) { this.state = ST.TITLE; this.input.flush(); }
+                    if (this.input.justPressed('start') || this.input.justPressed('pause')) {
+                        this.returnToTitle();
+                    }
                 }
                 break;
             case ST.VICTORY:
                 this.resultT += dt;
-                this.scene.update(dt, this.cam.x * PPM);
+                this.world.update(dt, this.cam.x);
                 this.fx.update(dt);
                 if (this.resultT > 0.8 && (this.input.justPressed('start') || this.input.justPressed('pause'))) {
-                    this.state = ST.TITLE; this.input.flush();
+                    this.returnToTitle();
                 }
                 break;
         }
@@ -542,14 +685,16 @@ class Game {
                 if (inp.justPressed('down')) { this.titleIndex = (this.titleIndex + 1) % 3; this.audio.play('cursor'); }
                 if (inp.justPressed('start')) {
                     this.audio.play('confirm');
-                    if (this.titleIndex === 0) { this.state = ST.SELECT; }
-                    else if (this.titleIndex === 1) { this.state = ST.SELECT; }
+                    if (this.titleIndex === 0) { this._enterSelect(); }
+                    else if (this.titleIndex === 1) { this._enterSelect(); }
                     else { this.state = ST.HELP; }
                     this.input.flush();
                 }
                 break;
             case ST.HELP:
-                if (inp.justPressed('start') || inp.justPressed('pause')) { this.state = ST.TITLE; this.audio.play('confirm'); this.input.flush(); }
+                if (inp.justPressed('start') || inp.justPressed('pause')) {
+                    this.state = ST.TITLE; this.audio.play('confirm'); this.input.flush();
+                }
                 break;
             case ST.SELECT:
                 if (inp.justPressed('left')) { this.selectIndex = (this.selectIndex + 4) % 5; this.audio.play('cursor'); }
@@ -573,26 +718,16 @@ class Game {
                 if (inp.justPressed('pause')) { this.state = ST.PLAY; this.audio.play('confirm'); this.audio.resume(); this.input.flush(); }
                 if (inp.justPressed('start')) {
                     this.audio.play('confirm');
-                    // 失焦自动暂停时音频上下文已被 suspend，操作暂停菜单（恢复/重开/返回标题）时统一唤醒
+                    // 失焦自动暂停时音频上下文已被 suspend，操作暂停菜单时统一唤醒
                     this.audio.resume();
                     this.input.flush();
                     if (this.pauseIndex === 0) this.state = ST.PLAY;
                     else if (this.pauseIndex === 1) { this.player.lives = Math.max(1, this.player.lives); this.loadLevel(this.levelIndex); }
-                    else if (this.pauseIndex === 2) { this.state = ST.TITLE; this.audio.playMusic(null); }
+                    else if (this.pauseIndex === 2) { this.returnToTitle(); }
                     else { this.audio.setMuted(!this.audio.muted); if (!this.audio.muted) this.audio.playMusic(this.bossActive ? 'boss' : this.level.music); }
                 }
                 break;
         }
-    }
-
-    updateTitle(dt) {
-        this.t = (this.t || 0) + dt;
-        this.cam.x += dt * 0.55;
-        this.scene.update(dt, this.cam.x * PPM);
-    }
-
-    updateSelect(dt) {
-        this.scene.update(dt, this.cam.x * PPM);
     }
 
     /* ---------------- 战斗主更新 ---------------- */
@@ -601,14 +736,12 @@ class Game {
             this.fx.hitStop -= dt;
             this.fx.update(dt * 0.25);
             this.updateCamera(dt);
-            this.scene.update(dt * 0.3, this.cam.x * PPM);
+            this.world.update(dt * 0.3, this.cam.x);
             return;
         }
         this.playTime += dt;
         this.updateWorld(dt, false);
         this.updateWaves(dt);
-
-        // 玩家阵亡且无命 → 已在 onActorDead 排程
     }
 
     updateWorld(dt, frozenAI) {
@@ -639,12 +772,15 @@ class Game {
                 if (a === this.player) { a.update(dt); continue; }
                 if (a.deadT > 2.4) { a.remove = true; continue; }
             }
-            if (frozenAI && a !== this.player) { a.animate(dt); continue; }
+            if (frozenAI && a !== this.player) { a.animate(dt); a.rig.update(a, dt); continue; }
             a.update(dt);
         }
-        // 清理
+        // 清理（3D 对象一并释放）
         for (let i = this.actors.length - 1; i >= 0; i--) {
-            if (this.actors[i].remove) this.actors.splice(i, 1);
+            if (this.actors[i].remove) {
+                this._disposeActor(this.actors[i]);
+                this.actors.splice(i, 1);
+            }
         }
 
         // 投射物
@@ -667,7 +803,7 @@ class Game {
         this.separate();
         this.fx.update(dt);
         this.updateCamera(dt);
-        this.scene.update(dt, this.cam.x * PPM);
+        this.world.update(dt, this.cam.x);
     }
 
     /** 角色互推，避免重叠 */
@@ -697,12 +833,20 @@ class Game {
                 b.z = U.clamp(b.z, GROUND.zMin, GROUND.zPlayMax);
             }
         }
+        // 挤压也会把人推出战区边界，这里再收敛一次，避免出现「怪卡在空气墙外」
+        for (const a of list) {
+            if (!a.dead && !a.remove) a.clampToArena();
+        }
     }
 
     updateCamera(dt) {
-        const half = VIEW.W / 2 / PPM;
+        const half = CAM.halfW;
         const L = this.level.length;
         let target = this.player ? this.player.x : half;
+        // BOSS 战时镜头往 BOSS 偏一点，免得一方跑到看不见的地方
+        if (this.bossActive && this.boss && !this.boss.dead && this.player) {
+            target = Math.max(this.player.x, this.boss.x - 3.0);
+        }
         target = U.clamp(target, half, Math.max(half, L - half));
         this.cam.x = U.damp(this.cam.x, target, 6.5, dt);
         this.cam.x = U.clamp(this.cam.x, half, Math.max(half, L - half));
@@ -713,34 +857,24 @@ class Game {
      * ========================================================== */
     render() {
         const ctx = this.ctx;
-        // 最外层缩放：把 800x600 逻辑坐标映射到高分后备缓冲上
-        ctx.save();
-        ctx.scale(this.renderScale || 1, this.renderScale || 1);
-
-        ctx.save();
+        ctx.setTransform(this.uiScale, 0, 0, this.uiScale, 0, 0);
         ctx.clearRect(0, 0, VIEW.W, VIEW.H);
 
-        // 屏幕震动
-        const shx = this.fx.shakeX, shy = this.fx.shakeY;
-        ctx.translate(shx, shy);
+        // 3D
+        this.stage.setCamX(this.cam.x);
+        this.stage.shakeX = this.fx.shakeX;
+        this.stage.shakeY = this.fx.shakeY;
+        this.stage.render();
 
-        this.scene.draw(ctx, this.cam.x * PPM);
+        // 伤害数字 / 闪白
+        this.fx.drawOverlay(ctx, this.stage);
 
-        if (this.state !== ST.TITLE && this.state !== ST.SELECT && this.state !== ST.HELP) {
-            this.drawWorld(ctx);
-        } else {
-            // 标题/选人：展示一名武将立绘
-            this.drawIdleHero(ctx);
+        // 战场边界提示
+        if (this.state === ST.PLAY || this.state === ST.INTRO || this.state === ST.CLEAR) {
+            if (this.waveState === 'fight' || this.bossActive) this.drawArenaEdge(ctx);
         }
 
-        this.scene.drawFront(ctx, this.cam.x * PPM);
-        this.fx.draw(ctx);
-        ctx.restore();
-
-        this.fx.drawFlash(ctx);
-
         // 界面层
-        ctx.save();
         switch (this.state) {
             case ST.TITLE: this.ui.drawTitle(ctx); break;
             case ST.HELP: this.ui.drawHelp(ctx); break;
@@ -752,82 +886,53 @@ class Game {
             case ST.RESULT: this.ui.drawResult(ctx, false); break;
             case ST.VICTORY: this.ui.drawVictory(ctx); break;
         }
-        ctx.restore();
 
-        // 暗角
         this.drawVignette(ctx);
-
-        ctx.restore(); // 收回最外层缩放
-    }
-
-    drawWorld(ctx) {
-        const cam = this.cam;
-
-        // 阴影统一先画
-        for (const a of this.actors) a.drawShadow(ctx, cam);
-        for (const b of this.breakables) {
-            Fig.shadow(ctx, VIEW.W / 2 + (b.x - cam.x) * PPM, screenY(b.z), 17 * depthScale(b.z), 0.3, 1);
-        }
-
-        // 按纵深排序
-        const list = [];
-        for (const a of this.actors) if (!a.remove) list.push({ z: a.z, o: a, t: 0 });
-        for (const b of this.breakables) if (!b.dead) list.push({ z: b.z - 0.001, o: b, t: 1 });
-        for (const it of this.items) if (!it.dead) list.push({ z: it.z - 0.002, o: it, t: 2 });
-        for (const p of this.projectiles) if (!p.dead) list.push({ z: p.z, o: p, t: 3 });
-        list.sort((a, b) => a.z - b.z);
-
-        for (const e of list) {
-            const o = e.o;
-            if (o.dead && o.deadT != null && o !== this.player) {
-                const k = U.clamp(1 - (o.deadT - 1.5) / 0.9, 0, 1);
-                ctx.save(); ctx.globalAlpha = k;
-                o.draw(ctx, cam);
-                ctx.restore();
-            } else {
-                o.draw(ctx, cam);
-            }
-        }
-
-        // 锁屏战斗时画两侧的"战场边界"暗示
-        if ((this.waveState === 'fight' || this.bossActive) && this.player) {
-            this.drawArenaEdge(ctx);
-        }
+        if (this.fade > 0) this.ui.drawFade(ctx, this.fade);
     }
 
     drawArenaEdge(ctx) {
-        const cam = this.cam;
         ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
+        const p = {}, pb = {};
         const edges = [
             { x: this.arena.min, dir: -1 },
             { x: this.arena.max, dir: 1 }
         ];
+        const t = this.time;
         for (const e of edges) {
-            const sx = VIEW.W / 2 + (e.x - cam.x) * PPM;
-            if (sx < -60 || sx > VIEW.W + 60) continue;
-            const g = ctx.createLinearGradient(sx, 0, sx + e.dir * 90, 0);
-            g.addColorStop(0, 'rgba(255,120,60,0.20)');
-            g.addColorStop(1, 'rgba(255,120,60,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(Math.min(sx, sx + e.dir * 90), 0, 90, VIEW.H);
-        }
-        ctx.restore();
-    }
+            this.stage.project(e.x, 2.55, 1.8, p);
+            this.stage.project(e.x, 0.0, 1.8, pb);
+            if (!p.visible || !pb.visible) continue;
+            if (p.x < -90 || p.x > VIEW.W + 90) continue;
 
-    /** 标题 / 选人界面的武将展示（标题页右移，避免压住中央菜单） */
-    drawIdleHero(ctx) {
-        const key = this.state === ST.SELECT ? Object.keys(HERO_KIT)[this.selectIndex] : 'guanyu';
-        const look = LOOKS[key];
-        const t = this.ui.t;
-        const hx = this.state === ST.TITLE ? VIEW.W / 2 + 168 : VIEW.W / 2;
-        ctx.save();
-        ctx.translate(hx, VIEW.H - 92);
-        const k = this.state === ST.TITLE ? 132 : 108;
-        ctx.scale(k, k);
-        ctx.translate(0, -FOOT_OFF);
-        const pose = Fig.blend(Fig.idle(t * 0.8, look), Fig.idle(t * 0.8 + 0.1, look), 0.5);
-        Fig.draw(ctx, look, Fig.solve(pose, look.body), { time: t });
+            // 竖立的淡光幕：顶端透明、近地变浓，像一道看不见的屏障
+            const h = Math.max(24, pb.y - p.y);
+            const vg = ctx.createLinearGradient(0, p.y, 0, pb.y);
+            vg.addColorStop(0, 'rgba(255,150,70,0)');
+            vg.addColorStop(0.55, 'rgba(255,140,60,0.10)');
+            vg.addColorStop(1, 'rgba(255,120,50,0.30)');
+            ctx.fillStyle = vg;
+            const w = 30;
+            ctx.fillRect(p.x - w / 2, p.y, w, h);
+
+            // 地面光带：一道贴地的弧光
+            const eg = ctx.createRadialGradient(pb.x, pb.y, 2, pb.x, pb.y, 46);
+            eg.addColorStop(0, 'rgba(255,190,110,0.42)');
+            eg.addColorStop(1, 'rgba(255,120,50,0)');
+            ctx.fillStyle = eg;
+            ctx.beginPath();
+            ctx.ellipse(pb.x, pb.y, 46, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 上升的光点，让边界有「通电」的感觉
+            for (let i = 0; i < 4; i++) {
+                const k = ((t * 0.42 + i * 0.25) % 1);
+                const yy = pb.y - k * h;
+                const a = (1 - k) * 0.5;
+                ctx.fillStyle = `rgba(255,206,140,${a.toFixed(3)})`;
+                ctx.fillRect(p.x - 1.5, yy, 3, 8);
+            }
+        }
         ctx.restore();
     }
 
@@ -853,11 +958,12 @@ function C_gold() { return '#F2C14E'; }
  * ========================================================== */
 function startGameApp() {
     const canvas = document.getElementById('gameCanvas');
-    if (!canvas) {
-        window.__lastErr = 'gameCanvas not found';
+    const uiCanvas = document.getElementById('uiCanvas');
+    if (!canvas || !uiCanvas) {
+        window.__lastErr = 'canvas not found';
         return;
     }
-    const game = new Game(canvas);
+    const game = new Game(canvas, uiCanvas);
     window.GAME = game;
     game.start();
 }

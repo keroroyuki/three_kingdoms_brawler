@@ -3,7 +3,7 @@
  * 并分段采样，确认装饰元素铺满整幅画布而非堆在左端。
  */
 'use strict';
-const { chromium } = require('C:/Users/14512/.workbuddy/binaries/node/versions/22.22.2-2/node_modules/playwright-core');
+const { chromium } = require('./pw');
 const CHROME = process.env.CHROME_BIN || 'C:/Users/14512/.agent-browser/browsers/chrome-152.0.7977.64/chrome.exe';
 const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/index.html';
 

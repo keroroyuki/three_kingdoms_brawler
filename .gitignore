@@ -9,3 +9,6 @@ _shots/
 .idea/
 Thumbs.db
 .DS_Store
+
+# 测试运行日志（临时产物）
+_test/*.log

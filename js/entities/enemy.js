@@ -31,7 +31,7 @@ class Enemy extends Actor {
         this.repathT = 0;
         this.wanderDir = U.pick([-1, 1]);
         this.hasToken = false;
-        this.enterT = 0;          // 出场动画
+        this.enterT = 0;
         this.entering = cfg.entering !== false;
         this.attackCd = U.rand(0.2, 0.9);
         this.strafeDir = U.pick([-1, 1]);
@@ -48,7 +48,6 @@ class Enemy extends Actor {
         }
     }
 
-    /* ---------------- 目标选择 ---------------- */
     acquireTarget() {
         const g = this.game;
         let best = null, bd = 1e9;
@@ -83,7 +82,6 @@ class Enemy extends Actor {
             }
         }
 
-        // 硬直类状态
         if (this.state === 'down') {
             this.downTime += dt;
             if (this.downTime > 0.75) { this.forceState('getUp'); }
@@ -106,7 +104,6 @@ class Enemy extends Actor {
         }
         if (this.state === 'charge') { this.tickCharge(dt); return; }
 
-        // 攻击中
         if (this.atkDef) {
             const d = this.atkDef;
             if (!this.atkHitDone && this.stateT >= d.hitAt) {
@@ -142,9 +139,13 @@ class Enemy extends Actor {
         const A = this.ai;
         const ranged = (this.kind === 'archer' || this.kind === 'mage');
 
-        /* ---- 远程：保持距离 ---- */
         if (ranged) {
-            if (adx < A.keep - 0.6) {
+            // 退无可退时不再贴墙踏步：否则弓手/法师会顶着战区边界一直往后退，
+            // 玩家被闸门挡在另一侧，永远够不到它。
+            const B = this.game.arena;
+            const away = -U.sign(dx);
+            const atEdge = !!B && ((away < 0 && this.x <= B.min + 0.55) || (away > 0 && this.x >= B.max - 0.55));
+            if (adx < A.keep - 0.6 && !atEdge) {
                 this.move(-U.sign(dx) * this.spd * 0.9, -U.sign(dz) * this.spd * 0.35);
                 this.setState('walk');
             } else if (adx > A.range) {
@@ -161,12 +162,9 @@ class Enemy extends Actor {
             return;
         }
 
-        /* ---- 近战 ---- */
-        // 靠近距离必须小于攻击判定距离，否则会站着打不到
         const atkReach = this.reach + REACH_PAD;
         const range = atkReach * (A.approach || 0.86);
         if (adx > range) {
-            // 骑兵：远距离蓄力冲锋
             if (A.charge && adx > 3.4 && adx < 9 && this.attackCd <= 0 && this.tryToken()) {
                 this.beginCharge(t);
                 return;
@@ -178,7 +176,6 @@ class Enemy extends Actor {
             return;
         }
 
-        // 进入攻击距离
         if (Math.abs(dz) > (A.keepZ || 0.15)) {
             this.move(U.sign(dx) * this.spd * 0.35, U.sign(dz) * this.spd * 0.85);
             this.setState('walk');
@@ -186,7 +183,6 @@ class Enemy extends Actor {
         }
 
         if (this.attackCd <= 0) {
-            // 盾兵：有概率先行格挡
             if (A.guardChance && this.hp < this.maxHp * 0.6 && U.chance(A.guardChance * 0.35)) {
                 this.setState('guard'); this.guardT = U.rand(0.5, 1.0);
                 this.attackCd = 0.5;
@@ -197,7 +193,6 @@ class Enemy extends Actor {
                 return;
             }
         }
-        // 没拿到令牌 → 绕圈等待
         this.strafe(dt, t);
     }
 
@@ -217,7 +212,6 @@ class Enemy extends Actor {
         this.vx = vx; this.vz = vz;
     }
 
-    /* ---------------- 攻击令牌 ---------------- */
     tryToken() {
         if (this.hasToken) return true;
         if (this.game.requestToken(this)) { this.hasToken = true; return true; }
@@ -227,19 +221,15 @@ class Enemy extends Actor {
         if (this.hasToken) { this.hasToken = false; this.game.releaseToken(this); }
     }
 
-    /* ---------------- 近战起手 ---------------- */
     beginMelee(t) {
-        const heavy = this.kind === 'heavy' || this.kind === 'spear';
-        const combo = this.ai.combo && U.chance(0.5) ? 2 : 1;
-        this.meleeQueue = combo;
+        this.meleeQueue = (this.ai.combo && U.chance(0.5)) ? 2 : 1;
         this.startMeleeSwing();
     }
 
     startMeleeSwing() {
         const heavy = this.kind === 'heavy' || this.kind === 'spear';
-        const frames = this.meleeQueue > 1 && heavy ? Fig.atk2Frames : Fig.atk1Frames;
         const d = {
-            frames,
+            anim: heavy ? 'heavy' : 'slash1',
             dur: heavy ? 0.62 : 0.48,
             hitAt: heavy ? 0.30 : 0.20,
             dmgMul: heavy ? 1.25 : 0.95,
@@ -259,7 +249,6 @@ class Enemy extends Actor {
         this.game.audio.play(d.sound);
     }
 
-    /* ---------------- 远程起手 ---------------- */
     beginRanged(t) {
         this.castDur = this.ai.windup + 0.18;
         this.castKind = this.kind === 'archer' ? 'arrow' : 'fire';
@@ -279,7 +268,7 @@ class Enemy extends Actor {
         if (this.castKind === 'arrow') {
             g.spawnProjectile({
                 kind: 'arrow', team: this.team, owner: this,
-                x: this.x + this.facing * 0.45, z: this.z, y: 0.95,
+                x: this.x + this.facing * 0.45, z: this.z, y: 1.05,
                 vx: this.facing * 11.5,
                 vz: (this.target.z - this.z) * 1.35,
                 dmg: this.atk * 1.0
@@ -288,7 +277,7 @@ class Enemy extends Actor {
         } else {
             g.spawnProjectile({
                 kind: 'fire', team: this.team, owner: this,
-                x: this.x + this.facing * 0.5, z: this.z, y: 1.0,
+                x: this.x + this.facing * 0.5, z: this.z, y: 1.10,
                 vx: this.facing * 7.0,
                 vz: (this.target.z - this.z) * 0.9,
                 dmg: this.atk * 1.15, homing: 0.9
@@ -323,7 +312,6 @@ class Enemy extends Actor {
             this.hitList = new Set();
         }
         this.chargeHit.t += dt;
-        // 冲锋持续命中（同一目标 0.4s 内只中一次）
         const g = this.game;
         for (const e of g.actors) {
             if (e.team === this.team || e.dead) continue;
@@ -336,7 +324,7 @@ class Enemy extends Actor {
                 heavy: true, src: this, srcX: this.x
             });
         }
-        g.fx.dust(this.sx(g.cam) - this.chargeDir * 20, this.sy(g.cam), 1, '#B79B72');
+        if (Math.random() < 0.55) g.fx.dust(this.foot(), 1, '#B79B72');
         this.chargeTimer = (this.chargeTimer || 0) + dt;
         if (this.chargeTimer > 0.85) {
             this.chargeTimer = 0; this.chargeHit = null;
@@ -346,12 +334,7 @@ class Enemy extends Actor {
         }
     }
 
-    /* ---------------- 受击 / 死亡 ---------------- */
     takeHit(h) {
-        // 盾兵正面格挡
-        if (this.kind === 'shield' && this.state === 'guard' && h.dir * this.facing < 0) {
-            /* 走基类逻辑 */
-        }
         const r = super.takeHit(h);
         if (r && this.hasToken && (this.state === 'hurt' || this.state === 'downA')) {
             this.releaseToken();
@@ -368,19 +351,13 @@ class Enemy extends Actor {
     }
 
     animate(dt) {
-        if (this.state === 'cast') {
-            this.pose = Fig.cast(this.time);
-            this.telegraph = U.clamp(this.stateT / (this.castDur || 0.5), 0, 1);
-            return;
-        }
         super.animate(dt);
-        // 起手预警强度
-        if (this.atkDef) {
+        if (this.state === 'cast') {
+            this.telegraph = U.clamp(this.stateT / (this.castDur || 0.5), 0, 1);
+        } else if (this.atkDef) {
             const d = this.atkDef;
             const k = U.clamp(this.stateT / Math.max(0.01, d.hitAt), 0, 1);
             this.telegraph = this.stateT < d.hitAt ? k : 0;
-        } else if (this.state === 'cast') {
-            this.telegraph = U.clamp(this.stateT / (this.castDur || 0.5), 0, 1);
         } else if (this.state === 'charge') {
             this.telegraph = this.chargeWind > 0 ? 1 : 0;
         } else {
@@ -462,17 +439,23 @@ class Boss extends Enemy {
         this.isBoss = true;
         this.superArmor = true;
         this.actionCd = 1.6;
-        this.current = null;      // 当前技能
+        this.current = null;
         this.entering = true;
         this.enterT = 0;
         this.invuln = 1.2;
         this.arenaLock = cfg.lockX;
         this.scaleBase = (cfg.scale || 1) * 1.06;
-        // 纯视觉放大：BOSS 需要压倒性体量，但不牵连碰撞盒与击退质量
-        this.drawScale = this.look.bossScale || 1.72;
         this.mass = 3.2;
         this.scoreValue = 5000;
         this.hpBarPulse = 0;
+
+        // 脚下能量场
+        this.aura = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: TK.glowTex(), color: new THREE.Color(this.look.magic || '#7E57C2'),
+            blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.55
+        }));
+        this.aura.scale.set(3.4, 1.5, 1);
+        game.stage.scene.add(this.aura);
     }
 
     get phaseIndex() {
@@ -480,26 +463,6 @@ class Boss extends Enemy {
         let p = 0;
         for (let i = 0; i < this.kit.phases.length; i++) if (r <= this.kit.phases[i]) p = i;
         return p;
-    }
-
-    /** BOSS 脚下能量场：持续 aura，随呼吸脉动，颜色取该 BOSS 的法术色 */
-    drawShadow(ctx, cam) {
-        if (this.remove) return;
-        const x = this.sx(cam), y = screenY(this.z) + (cam.y || 0);
-        const k = PPM * this.ds * (this.drawScale || 1);
-        const hue = this.look.magic || '#7E57C2';
-        const pulse = 0.86 + Math.sin(this.time * 3.2) * 0.14;
-        const r = 1.18 * k * pulse;
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const g = ctx.createRadialGradient(x, y, 2, x, y, r);
-        g.addColorStop(0, U.rgba(hue, 0.46));
-        g.addColorStop(0.45, U.rgba(hue, 0.19));
-        g.addColorStop(1, U.rgba(hue, 0));
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.32, 0, 0, TAU); ctx.fill();
-        ctx.restore();
-        super.drawShadow(ctx, cam);
     }
 
     think(dt) {
@@ -513,7 +476,6 @@ class Boss extends Enemy {
         }
 
         if (this.state === 'down' || this.state === 'getUp') {
-            // BOSS 不会被击倒，仅短暂失衡
             this.forceState('idle');
         }
         if (this.state === 'hurt' && this.stateT > 0.12) this.setState('idle');
@@ -526,9 +488,6 @@ class Boss extends Enemy {
 
         if (this.current) { this.tickSkill(dt); return; }
         if (this.state === 'cast') {
-            if (this.stateT >= (this.current ? 0 : (this.windupDur || 0.5))) {
-                // 由 tickSkill 接管
-            }
             return;
         }
         if (this.atkDef) {
@@ -554,7 +513,6 @@ class Boss extends Enemy {
             return;
         }
 
-        // 走位
         const want = 1.5;
         if (adx > want + 0.4) {
             const sp = this.spd * (0.7 + this.phase * 0.16);
@@ -612,14 +570,12 @@ class Boss extends Enemy {
         this.hitList = this.hitList || new Set();
 
         switch (s.type) {
-            case 'sweep': this.bossMelee(s, at, Fig.atk3Frames, 0.62, 0.28, 'v'); break;
+            case 'sweep': this.bossMelee(s, at, 0.62, 0.28, 'h'); break;
             case 'thrust':
                 if (at < 0.06) this.vx = this.facing * 9; else this.vx *= 0.86;
-                this.bossMelee(s, at, Fig.atkDashFrames, 0.55, 0.14, 'thrust');
+                this.bossMelee(s, at, 0.55, 0.14, 'thrust');
                 break;
-            case 'spin':
-                this.bossSpin(s, at);
-                break;
+            case 'spin': this.bossSpin(s, at); break;
             case 'dash':
                 if (at < 0.42) { this.vx = this.facing * this.spd * 4.2; this.bossRushHit(s); }
                 else this.vx *= 0.8;
@@ -643,14 +599,13 @@ class Boss extends Enemy {
         this.vx = 0; this.vz = 0;
     }
 
-    bossMelee(s, at, frames, dur, hitAt, arcKind) {
-        const k = U.clamp(at / dur, 0, 1);
-        this.pose = Fig.sample(frames, k * dur);
+    bossMelee(s, at, dur, hitAt, arcKind) {
         if (at >= hitAt && !this.skillFired.has('m')) {
             this.skillFired.add('m');
             const g = this.game;
-            g.fx.slash(this.sx(g.cam) + this.facing * 40 * this.ds, this.cy(g.cam),
-                1.9 * this.ds, this.facing, arcKind, s.hue || '#FFD166');
+            const c = this.chest();
+            g.fx.slash({ x: c.x + this.facing * 0.9, y: c.y, z: c.z },
+                2.0, this.facing, arcKind, s.hue || '#FFD166');
             this.hitList = new Set();
             this.hitArc({
                 dmgMul: s.dmgMul, reachMul: s.reachMul, kb: s.kb, kbUp: s.kbUp || 0,
@@ -665,15 +620,14 @@ class Boss extends Enemy {
     bossSpin(s, at) {
         const g = this.game;
         const dur = s.dur;
-        const k = U.clamp(at / dur, 0, 1);
-        this.pose = Fig.spin(k);
         this.vx = this.facing * 0.9;
         const n = s.hits || 4;
         for (let i = 0; i < n; i++) {
             const tt = 0.10 + i * (dur * 0.78 / n);
             if (at >= tt && !this.skillFired.has('s' + i)) {
                 this.skillFired.add('s' + i);
-                g.fx.slash(this.sx(g.cam), this.cy(g.cam), 1.7 * this.ds,
+                const c = this.chest();
+                g.fx.slash({ x: c.x, y: c.y, z: c.z }, 1.8,
                     i % 2 ? this.facing : -this.facing, 'h', s.hue);
                 this.hitList = new Set();
                 this.hitRadial({ radius: s.radius, radiusZ: 1.1, dmgMul: s.dmgMul, kb: s.kb, heavy: i === n - 1 });
@@ -709,7 +663,7 @@ class Boss extends Enemy {
         if ((landed || at > 0.8) && !this.skillFired.has('l')) {
             this.skillFired.add('l');
             this.vx = 0;
-            g.fx.wave(this.sx(g.cam), this.sy(g.cam), 210, s.hue, 0.45, 7);
+            g.fx.wave({ x: this.x, y: 0, z: this.z }, 210, s.hue, 0.45, 7);
             g.fx.addShake(14);
             g.audio.play('hitHeavy');
             this.hitList = new Set();
@@ -732,7 +686,7 @@ class Boss extends Enemy {
                 const tz = tgt ? tgt.z + U.rand(-0.3, 0.3) : U.rand(0.6, 3.0);
                 g.spawnProjectile({
                     kind: 'orb', team: this.team, owner: this,
-                    x: this.x + this.facing * 0.55, z: this.z, y: 1.05,
+                    x: this.x + this.facing * 0.55, z: this.z, y: 1.15,
                     vx: this.facing * 8.2, vz: (tz - this.z) * 1.1,
                     dmg: this.atk * (s.dmgMul || 1), color: s.hue
                 });
@@ -752,12 +706,10 @@ class Boss extends Enemy {
                 g.schedule(i * 0.16, () => {
                     const tx = (t && !t.dead ? t.x : this.x + this.facing * 3) + U.rand(-2.6, 2.6);
                     const tz = U.clamp(U.rand(0.5, 3.1), GROUND.zMin, GROUND.zPlayMax);
-                    const sx = VIEW.W / 2 + (tx - g.cam.x) * PPM;
-                    const sy = screenY(tz);
-                    g.fx.beam(sx, 30, sy, s.hue, 0.45);
+                    g.fx.beam(tx, tz, s.hue, 0.45);
                     g.schedule(0.22, () => {
-                        g.fx.fireBurst(sx, sy, 18, 1.2);
-                        g.fx.wave(sx, sy, 110, s.hue, 0.4, 5);
+                        g.fx.fireBurst({ x: tx, y: 0.2, z: tz }, 18, 1.2);
+                        g.fx.wave({ x: tx, y: 0, z: tz }, 110, s.hue, 0.4, 5);
                         g.audio.play('thunder');
                         g.fx.addShake(6);
                         for (const e of g.actors) {
@@ -785,7 +737,7 @@ class Boss extends Enemy {
                 g.schedule(i * 0.18, () => {
                     const px = this.x + (i % 2 ? 1 : -1) * U.rand(1.4, 3.0);
                     const pz = U.rand(0.5, 3.1);
-                    g.fx.fireBurst(VIEW.W / 2 + (px - g.cam.x) * PPM, screenY(pz), 14, 0.9);
+                    g.fx.fireBurst({ x: px, y: 0.3, z: pz }, 14, 0.9);
                     g.spawnEnemy(s.minion || 'soldier', px, pz, { entering: true });
                 });
             }
@@ -797,7 +749,7 @@ class Boss extends Enemy {
         const g = this.game;
         g.fx.addFlash(0.6, '#FF5A3C');
         g.fx.addShake(16);
-        g.fx.wave(this.sx(g.cam), this.sy(g.cam), 320, '#FF8A3C', 0.6, 8);
+        g.fx.wave({ x: this.x, y: 0, z: this.z }, 320, '#FF8A3C', 0.6, 8);
         g.audio.play('bossRoar');
         g.showBanner(`第 ${this.phase + 1} 阶段`, '#FF8A3C');
         this.invuln = Math.max(this.invuln, 0.7);
@@ -806,25 +758,19 @@ class Boss extends Enemy {
         this.stun = 0.6;
     }
 
-    animate(dt) {
-        if (this.current) {
-            // sweep/thrust/spin 的攻击期由 bossMelee/bossSpin 自行驱动 pose，
-            // 不可在此覆盖；dash/leap/bolt/meteor/summon 不驱动 pose，
-            // 需在此兜底刷新施法姿态，否则 BOSS 会冻结成一张静帧。
-            const ownsPose = this.current.type === 'sweep' || this.current.type === 'thrust'
-                || this.current.type === 'spin';
-            if (this.skillT < this.windupDur || !ownsPose) this.pose = Fig.cast(this.time);
-            return;
+    update(dt) {
+        super.update(dt);
+        if (this.aura) {
+            const pulse = 0.9 + Math.sin(this.time * 3.2) * 0.12;
+            this.aura.position.set(this.x, 0.08, this.z);
+            this.aura.scale.set(3.6 * pulse * this.rigScale * 0.5, 1.5 * pulse, 1);
+            this.aura.material.opacity = (this.dead ? 0.12 : 0.5) * (0.8 + 0.2 * Math.sin(this.time * 2.4));
         }
-        super.animate(dt);
     }
 
     takeHit(h) {
         if (this.dead) return false;
         const r = super.takeHit(h);
-        // BOSS 不倒地、不进长硬直，改为短暂失衡。
-        // 注意 super.takeHit 在 hp 归零时已调用 die()（置 state='downA'、击飞），
-        // 此时不能改写死亡姿态，否则 BOSS 会站着原地淡出而不击飞倒地。
         if (!this.dead) {
             if (this.state === 'downA') {
                 this.vy = 0; this.y = 0;
@@ -835,5 +781,11 @@ class Boss extends Enemy {
             }
         }
         return r;
+    }
+
+    dispose() {
+        super.dispose();
+        this.game.stage.scene.remove(this.aura);
+        this.aura.material.dispose();
     }
 }

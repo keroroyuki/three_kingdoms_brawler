@@ -1,6 +1,6 @@
 /* ============================================================
- * 三国战纪 · 实体基类
- * 世界坐标：x（前进方向，单位）/ z（纵深 0..3.4）/ y（离地高度）
+ * 三国战纪 · 实体基类（3D）
+ * 世界坐标：x 前进 / z 纵深 0..3.4 / y 离地高度
  * ============================================================ */
 'use strict';
 
@@ -10,6 +10,28 @@ const RZ = 0.235;  // z 方向（身厚）
 
 /** 攻击距离的额外补偿（让判定比武器视觉长度略宽，手感更爽） */
 const REACH_PAD = 0.42;
+
+/* 起手预警用的地面光环贴图 */
+let _warnTex = null;
+function warnTexture() {
+    if (_warnTex) return _warnTex;
+    const n = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = n;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(n / 2, n / 2, n * 0.20, n / 2, n / 2, n / 2);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.62, 'rgba(255,255,255,0.10)');
+    g.addColorStop(0.86, 'rgba(255,255,255,0.85)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, n, n);
+    const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    t.colorSpace = THREE.SRGBColorSpace;
+    _warnTex = t;
+    return t;
+}
 
 class Actor {
     constructor(game, cfg) {
@@ -24,7 +46,7 @@ class Actor {
         this.maxHp = Math.round((st.hp || 50) * (cfg.hpMul || 1));
         this.hp = this.maxHp;
         this.atk = (st.atk || 10) * (cfg.atkMul || 1);
-        this.spd = (st.spd || 60) / PPM;   // 单位/秒
+        this.spd = (st.spd || 60) / 62;   // 保持与原节奏一致：像素/秒 ÷ 62
         this.reach = st.reach || 1.0;
         this.mass = cfg.mass || (this.look.build || 1);
         this.superArmor = !!this.look.superArmor || this.isBoss;
@@ -38,7 +60,6 @@ class Actor {
         this.state = 'idle';
         this.stateT = 0;
         this.animT = U.rand(0, 6);
-        this.pose = Fig.base();
         this.time = U.rand(0, 10);
 
         this.dead = false;
@@ -57,7 +78,7 @@ class Actor {
 
         /* 被击相关 */
         this.downTime = 0;
-        this.hitCount = 0;      // 连段中被击次数（用于递减击退）
+        this.hitCount = 0;
 
         this.shadowAlpha = 1;
         this.gravity = GRAVITY;
@@ -66,52 +87,84 @@ class Actor {
         this.name = this.look.name;
         this.title = this.look.title || '';
         this.maxHpCache = this.maxHp;
+        this.drawScale = 1;
+        this.fade = 1;
 
         this._deathTimer = 0;
+
+        /* ---- 3D ---- */
+        this.rigScale = this.look.bossScale || 1;
+        this.rig = Chibi.create(cfg.look, this.look);
+        this.rig.attach(game.stage.scene);
+
+        this._warn = new THREE.Mesh(
+            new THREE.PlaneGeometry(1, 1),
+            new THREE.MeshBasicMaterial({
+                map: warnTexture(), transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false, color: 0xFF6B3C
+            })
+        );
+        this._warn.rotation.x = -Math.PI / 2;
+        this._warn.visible = false;
+        game.stage.scene.add(this._warn);
     }
 
     /* ---------------- 便捷属性 ---------------- */
     get alive() { return !this.dead; }
     get rx() { return RX * (this.look.build || 1) * this.scaleBase; }
     get rz() { return RZ * (this.look.build || 1) * this.scaleBase; }
-    get ds() { return depthScale(this.z) * this.scaleBase; }
-    /** 屏幕 x */
-    sx(cam) { return VIEW.W / 2 + (this.x - cam.x) * PPM; }
-    /** 脚底屏幕 y */
-    sy(cam) { return screenY(this.z) - this.y * PPM * this.ds + (cam.y || 0); }
-    /** 胸口屏幕 y（用于伤害数字、特效锚点） */
-    cy(cam) { return this.sy(cam) - 0.95 * PPM * this.ds; }
+
+    /** 胸口中弹点（特效锚点） */
+    chest() { return { x: this.x, y: this.y + 1.20 * this.rigScale, z: this.z }; }
+    /** 头顶（伤害数字锚点） */
+    head() { return { x: this.x, y: this.y + 2.02 * this.rigScale, z: this.z }; }
+    /** 脚底 */
+    foot() { return { x: this.x, y: this.y + 0.04, z: this.z }; }
 
     setState(s, keepT) {
         if (this.state === s) return;
         this.state = s;
         if (!keepT) this.stateT = 0;
     }
-    /** 强制重入（重复受击时重置计时） */
     forceState(s) { this.state = s; this.stateT = 0; }
 
     /* ============================================================
      * 更新
-     * ============================================================ */
+     * ========================================================== */
     update(dt) {
         this.time += dt;
         this.stateT += dt;
+        this.animT += dt * (this.state === 'run' ? 1.5 : (this.state === 'walk' ? 1.1 : 1));
         if (this.invuln > 0) this.invuln -= dt;
         if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 5.2);
 
         this.think(dt);
         this.physics(dt);
         this.animate(dt);
+        this.rig.update(this, dt);
+        this._syncWarn();
+    }
+
+    _syncWarn() {
+        const w = this._warn;
+        if (this.telegraph > 0.02 && !this.dead) {
+            w.visible = true;
+            w.position.set(this.x + this.facing * 0.55, 0.04, this.z);
+            const s = 0.9 + this.telegraph * 1.5;
+            w.scale.set(s, s, 1);
+            w.material.opacity = 0.18 + 0.42 * Math.abs(Math.sin(this.time * 12));
+            w.material.color.set(this.telegraph > 0.65 ? '#FF4A2C' : '#FFC24D');
+        } else {
+            w.visible = false;
+        }
     }
 
     physics(dt) {
-        // 水平 / 纵深
         this.x += this.vx * dt;
         this.z += this.vz * dt;
         this.z = U.clamp(this.z, GROUND.zMin, GROUND.zPlayMax);
         if (this.z <= GROUND.zMin || this.z >= GROUND.zPlayMax) this.vz = 0;
 
-        // 垂直
         if (this.y > 0 || this.vy !== 0) {
             this.vy -= this.gravity * dt;
             this.y += this.vy * dt;
@@ -122,7 +175,6 @@ class Actor {
             }
         }
 
-        // 摩擦
         if (this.y <= 0 && this.state !== 'dash' && this.state !== 'charge') {
             const f = Math.pow(0.0016, dt);
             this.vx *= f; this.vz *= f;
@@ -136,9 +188,7 @@ class Actor {
     onLand(impact) {
         const fx = this.game.fx;
         if (impact > 3) {
-            if (fx) {
-                fx.dust(this.sx(this.game.cam), this.sy(this.game.cam), 8, '#C8B79A');
-            }
+            if (fx) fx.dust(this.foot(), 9, '#C8B79A');
             if (this.state === 'downA') {
                 this.setState('down');
                 this.downTime = 0;
@@ -151,52 +201,26 @@ class Actor {
 
     clampToArena() {
         const g = this.game;
-        const A = (this.isPlayer && g.arena) ? g.arena : (g.softArena || g.arena);
-        if (A) this.x = U.clamp(this.x, A.min, A.max);
+        // 玩家永远被锁在战区（arena）内。敌人只在「入场跑位」时用更宽的软边界，
+        // 一旦进入战斗就必须回到战区内——否则远程兵会退到玩家够不到的地方放风筝。
+        const A = this.isPlayer ? g.arena : ((this.entering && g.softArena) ? g.softArena : g.arena);
+        if (!A) return;
+        const pad = this.isPlayer ? 0 : 0.35;
+        this.x = U.clamp(this.x, A.min - pad, A.max + pad);
     }
 
-    /** 子类实现 AI / 输入 */
     think(dt) { }
 
-    /* ============================================================
-     * 动画：把状态映射为姿态
-     * ============================================================ */
     animate(dt) {
-        let p = null, snap = false;
-        const t = this.animT;
-
-        switch (this.state) {
-            case 'idle': p = Fig.idle(t, this.look); break;
-            case 'walk': p = Fig.walk(t, 9.5); break;
-            case 'run': p = Fig.run(t); break;
-            case 'jump':
-            case 'air': p = this.vy > 0 ? Fig.jumpUp() : Fig.fall(); break;
-            case 'land': p = Fig.land(); snap = this.stateT < 0.02; break;
-            case 'guard': p = Fig.guard(t); break;
-            case 'hurt': p = Fig.hurt(); snap = true; break;
-            case 'downA': p = Fig.down(t); snap = true; break;
-            case 'down': p = Fig.down(t * 0.4); snap = true; break;
-            case 'getUp': p = Fig.getUp(U.clamp(this.stateT / 0.44, 0, 1)); snap = true; break;
-            case 'cast': p = Fig.cast(t); break;
-            case 'cheer': p = Fig.cheer(t); break;
-            case 'charge': p = Fig.charge(t); break;
-            default: p = Fig.idle(t, this.look);
-        }
-
-        if (this.atkDef) {
-            p = Fig.atkSample(this.look, this.atkDef.frames, this.stateT);
-            snap = true;
-        }
-
-        if (p) {
-            if (snap) this.pose = p;
-            else this.pose = Fig.blend(this.pose, p, U.clamp(dt * 17, 0, 1));
+        if (this.atkDef && this.state === '_atk') {
+            const d = this.atkDef;
+            if (!this.atkHitDone && this.stateT >= d.hitAt) this.doHitCheck();
         }
     }
 
     /* ============================================================
      * 攻击
-     * ============================================================ */
+     * ========================================================== */
     startAttack(def) {
         this.atkDef = def;
         this.stateT = 0;
@@ -206,7 +230,6 @@ class Actor {
         if (def.sound) this.game.audio.play(def.sound);
     }
 
-    /** 前向扇形判定 */
     hitArc(d) {
         const g = this.game;
         const reach = this.reach * (d.reachMul || 1) + REACH_PAD;
@@ -232,7 +255,6 @@ class Actor {
         return any;
     }
 
-    /** 环形范围判定（以自身为中心） */
     hitRadial(d) {
         const g = this.game;
         const R = d.radius || 2.2;
@@ -268,7 +290,6 @@ class Actor {
         return ok;
     }
 
-    /** 普攻判定执行一次 */
     doHitCheck() {
         const d = this.atkDef;
         if (!d || this.atkHitDone) return;
@@ -279,14 +300,13 @@ class Actor {
 
     /* ============================================================
      * 受击
-     * 返回 true = 有效命中
-     * ============================================================ */
+     * ========================================================== */
     takeHit(h) {
         if (this.dead || this.invuln > 0) return false;
 
         const g = this.game;
         const fx = g.fx;
-        const sx = this.sx(g.cam), cy = this.cy(g.cam);
+        const pos = this.chest();
 
         /* ---- 格挡判定 ---- */
         if (this.state === 'guard' && h.dir * this.facing < 0) {
@@ -296,24 +316,22 @@ class Actor {
             this.hp -= dmg;
             this.vx = h.dir * (perfect ? 0.35 : 1.5);
             this.stun = perfect ? 0 : 0.14;
-            fx.slash(sx + this.facing * 16, cy, 0.85 * this.ds, this.facing, 'h',
+            fx.slash({ x: pos.x + this.facing * 0.35, y: pos.y, z: pos.z }, 0.9, this.facing, 'h',
                 perfect ? '#BFE9FF' : '#FFD166');
-            fx.hitSpark(sx + this.facing * 14, cy + 6, -h.dir, perfect ? 1.5 : 0.7);
+            fx.hitSpark(pos, -h.dir, perfect ? 1.5 : 0.7);
             g.audio.play(perfect ? 'perfectGuard' : 'guard');
             if (perfect) {
                 fx.stop(0.14);
                 fx.addFlash(0.34, '#BFE9FF');
-                fx.text(sx, cy - 40, '完美格挡！', '#BFE9FF', 20);
+                fx.text({ x: pos.x, y: pos.y + 0.5, z: pos.z }, '完美格挡！', '#BFE9FF', 20);
                 if (h.src && h.src.alive) { h.src.stun = 0.62; h.src.forceState('stagger'); }
             }
-            if (dmg > 0) fx.damage(sx, cy - 20, dmg, 'guard');
+            if (dmg > 0) fx.damage(this.head(), dmg, 'guard');
             this.clampHp();
             return true;
         }
 
         /* ---- 命中 ---- */
-        // 非格挡受击必须复位完美格挡标记：否则上一次完美格挡会让此后每一次普通
-        // 受击都被 player.takeHit 误判为完美格挡（计数虚增、连击永不中断）
         this.lastBlockPerfect = false;
         let dmg = Math.max(1, Math.round(h.dmg));
         this.hp -= dmg;
@@ -324,18 +342,18 @@ class Actor {
             (this.state === 'charge' && !h.heavy);
         const stun = h.stun || (armored ? 0 : (h.heavy ? 0.34 : 0.24));
 
-        fx.damage(sx, cy - 16, dmg, h.heavy ? 'heavy' : 'normal');
-        fx.hitSpark(sx + h.dir * 8, cy, h.dir, h.heavy ? 1.7 : 0.9);
+        fx.damage(this.head(), dmg, h.heavy ? 'heavy' : 'normal');
+        fx.hitSpark(pos, h.dir, h.heavy ? 1.7 : 0.9);
         const wpn = (h.src && h.src.look) ? h.src.look.weapon : 'dao';
         const kind = (wpn === 'guandao' || wpn === 'axe') ? 'h'
             : (wpn === 'spear' || wpn === 'lance' || wpn === 'ji') ? 't'
-            : (wpn === 'fan' || wpn === 'staff') ? 'c' : 'h';
+                : (wpn === 'fan' || wpn === 'staff') ? 'c' : 'h';
         if (h.heavy) {
-            fx.slash(sx, cy, 1.05 * this.ds, h.dir, kind, '#FFE9A8');
+            fx.slash(pos, 1.15, h.dir, kind, '#FFE9A8');
             fx.addShake(kind === 'h' ? 9 : 6.5);
             fx.stop(TUNE.hitStopHeavy);
         } else {
-            fx.slash(sx, cy, 0.72 * this.ds, h.dir, kind, '#FFD166');
+            fx.slash(pos, 0.8, h.dir, kind, '#FFD166');
             fx.addShake(2.6);
             fx.stop(TUNE.hitStop);
         }
@@ -359,7 +377,6 @@ class Actor {
             this.forceState('hurt');
             this.stun = stun;
         } else {
-            // 霸体：只掉血，动作继续
             this.stun = 0;
         }
 
@@ -389,86 +406,11 @@ class Actor {
         this.game.onActorDead(this);
     }
 
-    /* ============================================================
-     * 绘制
-     * ============================================================ */
-    drawShadow(ctx, cam) {
-        if (this.remove) return;
-        const k = PPM * this.ds * (this.drawScale || 1);
-        const h = U.clamp(this.y / 2.4, 0, 1);
-        const w = 0.40 * k * (1 - h * 0.42);
-        const a = 0.32 * (1 - h * 0.62) * this.shadowAlpha;
-        Fig.shadow(ctx, this.sx(cam), screenY(this.z) + (cam.y || 0), w, a, 1);
-    }
-
-    draw(ctx, cam) {
-        if (this.remove) return;
-        const k = PPM * this.ds * (this.drawScale || 1);
-        const sx = this.sx(cam), sy = this.sy(cam);
-        const o = {
-            time: this.time,
-            flash: this.flash,
-            weaponAngle: this.weaponAngle || 0
-        };
-
-        ctx.save();
-        ctx.translate(sx, sy);
-        ctx.scale(k * this.facing, k);
-        if (this.pose.squash && this.pose.squash !== 1) {
-            ctx.scale(1 / this.pose.squash, this.pose.squash);
-        }
-        ctx.translate(0, -FOOT_OFF);
-        if (this.pose.bodyRot) ctx.rotate(this.pose.bodyRot * this.facing);
-
-        if (this.mount && this.state !== 'down' && this.state !== 'downA') {
-            Fig.drawMount(ctx, this.look, 0, 0, 1, 1, this.time, o);
-            ctx.translate(0, -0.52);
-        }
-
-        const s = Fig.solve(this.pose, this.look.body);
-        Fig.draw(ctx, this.look, s, o);
-        if (this.look.shieldColor) Fig.drawShield(ctx, this.look, s, o);
-        ctx.restore();
-
-        if (this.state === 'guard') this.drawGuardAura(ctx, cam);
-        if (this.telegraph > 0) this.drawTelegraph(ctx, cam);
-    }
-
-    drawGuardAura(ctx, cam) {
-        const k = this.ds;
-        const sx = this.sx(cam), cy = this.cy(cam);
-        const perfect = this.stateT < 0.17;
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = perfect ? 0.55 : 0.24;
-        ctx.strokeStyle = perfect ? '#BFE9FF' : '#9FB3C8';
-        ctx.lineWidth = 2.4 * k;
-        ctx.beginPath();
-        ctx.ellipse(sx + this.facing * 10 * k, cy, 26 * k, 44 * k, 0, 0, TAU);
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    /** 攻击预警（敌人起手） */
-    drawTelegraph(ctx, cam) {
-        const k = this.ds;
-        const a = this.telegraph;
-        const sx = this.sx(cam), cy = this.cy(cam);
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        // 0.30 + 0.34*sin() 会短暂落到负值，被浏览器钳成 0 造成 1 帧闪烁
-        ctx.globalAlpha = Math.max(0.03, 0.30 + 0.34 * Math.sin(this.time * 34));
-        ctx.fillStyle = a > 0.6 ? '#FF5A3C' : '#FFC94D';
-        ctx.beginPath();
-        ctx.arc(sx + this.facing * 16 * k, cy - 6 * k, (7 + a * 8) * k, 0, TAU);
-        ctx.fill();
-        ctx.globalAlpha = 0.5 * a;
-        ctx.strokeStyle = ctx.fillStyle;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(sx + this.facing * 10 * k, cy);
-        ctx.lineTo(sx + this.facing * (10 + 18 * a) * k, cy);
-        ctx.stroke();
-        ctx.restore();
+    dispose() {
+        this.rig.detach(this.game.stage.scene);
+        this.rig.dispose();
+        this.game.stage.scene.remove(this._warn);
+        this._warn.geometry.dispose();
+        this._warn.material.dispose();
     }
 }

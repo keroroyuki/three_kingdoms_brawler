@@ -49,6 +49,18 @@ canvas {
     background: #14100c;
 }
 
+/* WebGL 画面在下，UI 覆盖层在上，两者共用 800x600 逻辑尺寸 */
+#gameCanvas { position: relative; z-index: 1; }
+
+#uiCanvas {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    z-index: 2;
+    background: transparent;
+    pointer-events: none;
+}
+
 #tip {
     font-size: 13px;
     letter-spacing: 0.6px;

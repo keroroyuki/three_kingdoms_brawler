@@ -6,6 +6,7 @@
 class Projectile {
     constructor(game, cfg) {
         this.game = game;
+        this.stage = game.stage;
         this.kind = cfg.kind || 'arrow';
         this.team = cfg.team;
         this.owner = cfg.owner || null;
@@ -18,13 +19,54 @@ class Projectile {
         this.maxLife = cfg.maxLife || 3.2;
         this.dead = false;
         this.homing = cfg.homing || 0;
-        this.trail = [];
         this.rot = Math.atan2(this.vz * 0.6, this.vx);
+
+        this.group = new THREE.Group();
+        this._build();
+        this.stage.scene.add(this.group);
+        this.sync(0);
+    }
+
+    _build() {
+        const G = TK.G;
+        if (this.kind === 'arrow') {
+            const parts = [
+                G.at(G.cyl(0.012, 0.012, 0.52, '#6D4C33', 6), 0, 0, 0, 0, 0, Math.PI / 2),
+                G.at(G.cone(0.035, 0.14, '#D6DBE0', 4), 0.32, 0, 0, 0, 0, -Math.PI / 2, 0.5, 1, 0.5),
+                G.at(G.box(0.10, 0.09, 0.012, '#C62828'), -0.22, 0, 0, 0, 0, 0.2),
+                G.at(G.box(0.10, 0.012, 0.09, '#C62828'), -0.22, 0, 0, 0, 0, 0.2)
+            ];
+            const m = new THREE.Mesh(G.merge(parts), new THREE.MeshToonMaterial({
+                vertexColors: true, gradientMap: TK.gradient
+            }));
+            this.group.add(m);
+        } else {
+            // 火球 / 妖术弹：内芯 + 外晕
+            const col = this.kind === 'fire' ? '#FFB347' : this.color;
+            const core = new THREE.Mesh(
+                new THREE.SphereGeometry(0.10, 12, 8),
+                new THREE.MeshBasicMaterial({ color: new THREE.Color('#FFF3C4') })
+            );
+            const shell = new THREE.Mesh(
+                new THREE.SphereGeometry(0.20, 12, 8),
+                new THREE.MeshBasicMaterial({
+                    color: new THREE.Color(col), transparent: true, opacity: 0.55,
+                    blending: THREE.AdditiveBlending, depthWrite: false
+                })
+            );
+            const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: TK.glowTex(), color: new THREE.Color(col), blending: THREE.AdditiveBlending,
+                transparent: true, depthWrite: false, opacity: 0.9
+            }));
+            halo.scale.setScalar(0.9);
+            this.group.add(core, shell, halo);
+            this.core = core; this.shell = shell; this.halo = halo;
+        }
     }
 
     update(dt) {
         this.life += dt;
-        if (this.life > this.maxLife) { this.dead = true; return; }
+        if (this.life > this.maxLife) { this._kill(); return; }
 
         if (this.homing > 0) {
             let t = null, bd = 1e9;
@@ -45,22 +87,22 @@ class Projectile {
         this.y += this.vy * dt;
         this.rot = Math.atan2(this.vz * 0.55, this.vx);
 
-        if (this.z < -0.4 || this.z > GROUND.zMax + 0.4) this.dead = true;
+        if (this.z < -0.4 || this.z > GROUND.zMax + 0.4) { this._kill(); return; }
         if (this.y < 0.05) {
-            this.dead = true;
             const g = this.game;
-            if (this.kind === 'fire') g.fx.fireBurst(this.sx(), screenY(this.z), 8, 0.55);
-            else g.fx.dust(this.sx(), screenY(this.z), 5, '#C8B79A');
+            if (this.kind === 'fire') g.fx.fireBurst({ x: this.x, y: 0.1, z: this.z }, 8, 0.55);
+            else g.fx.dust({ x: this.x, y: 0.05, z: this.z }, 5, '#C8B79A');
+            this._kill();
+            return;
         }
         const ar = this.game.arena;
-        if (ar && (this.x < ar.min - 2 || this.x > ar.max + 2)) this.dead = true;
+        if (ar && (this.x < ar.min - 2 || this.x > ar.max + 2)) { this._kill(); return; }
 
-        // 命中
         for (const e of this.game.actors) {
             if (e.team === this.team || e.dead || e === this.owner) continue;
             if (Math.abs(e.x - this.x) > (e.rx + 0.14)) continue;
             if (Math.abs(e.z - this.z) > 0.42) continue;
-            const feetY = e.y, topY = e.y + 1.55;
+            const feetY = e.y, topY = e.y + 1.75 * e.rigScale;
             if (this.y < feetY - 0.15 || this.y > topY) continue;
             e.takeHit({
                 dmg: this.dmg, dir: U.sign(this.vx) || 1, kb: 1.6,
@@ -68,100 +110,47 @@ class Projectile {
                 heavy: this.kind !== 'arrow', src: this.owner, srcX: this.x
             });
             this.boom();
-            this.dead = true;
+            this._kill();
             return;
         }
 
-        this.trail.push({ x: this.sx(), y: this.py() });
-        if (this.trail.length > 7) this.trail.shift();
+        this.sync(dt);
+    }
+
+    sync(dt) {
+        this.group.position.set(this.x, this.y, this.z);
+        this.group.rotation.y = -this.rot;
+        if (this.kind === 'arrow') {
+            this.group.rotation.z = Math.atan2(this.vy, Math.abs(this.vx)) * 0.6;
+        } else if (this.core) {
+            const p = 1 + Math.sin(this.life * 26) * 0.12;
+            this.core.scale.setScalar(p);
+            this.shell.scale.setScalar(1 + Math.sin(this.life * 18) * 0.15);
+            this.halo.scale.setScalar(0.85 + Math.sin(this.life * 22) * 0.1);
+        }
     }
 
     boom() {
         const g = this.game;
+        const pos = { x: this.x, y: this.y, z: this.z };
         if (this.kind === 'fire') {
-            g.fx.fireBurst(this.sx(), this.py(), 16, 1.0);
+            g.fx.fireBurst(pos, 16, 1.0);
             g.fx.addShake(4);
             g.audio.play('fire');
         } else if (this.kind === 'orb') {
-            g.fx.wave(this.sx(), this.py(), 70, this.color, 0.34, 4);
+            g.fx.wave({ x: this.x, y: 0, z: this.z }, 70, this.color, 0.34, 4);
             g.fx.addShake(3);
             g.audio.play('hit');
         } else {
-            g.fx.hitSpark(this.sx(), this.py(), U.sign(this.vx) || 1, 0.6);
+            g.fx.hitSpark(pos, U.sign(this.vx) || 1, 0.6);
             g.audio.play('hit', { volume: 0.7 });
         }
     }
 
-    sx() { return VIEW.W / 2 + (this.x - this.game.cam.x) * PPM; }
-    py() { return screenY(this.z) - this.y * PPM * depthScale(this.z); }
-
-    draw(ctx) {
-        const x = this.sx(), y = this.py();
-        const k = depthScale(this.z);
-        ctx.save();
-
-        if (this.kind === 'arrow') {
-            // 拖尾
-            ctx.strokeStyle = U.rgba('#FFFFFF', 0.22);
-            ctx.lineWidth = 2 * k;
-            ctx.beginPath();
-            for (let i = 0; i < this.trail.length; i++) {
-                const p = this.trail[i];
-                if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-            }
-            ctx.lineTo(x, y);
-            ctx.stroke();
-
-            ctx.translate(x, y);
-            ctx.rotate(this.rot * 0.55);
-            ctx.scale(k, k);
-            // 杆
-            ctx.fillStyle = '#6D4C33';
-            ctx.fillRect(-20, -1.6, 26, 3.2);
-            // 箭头
-            ctx.fillStyle = '#D6DBE0';
-            ctx.beginPath();
-            ctx.moveTo(6, -4.4); ctx.lineTo(17, 0); ctx.lineTo(6, 4.4);
-            ctx.closePath(); ctx.fill();
-            // 羽
-            ctx.fillStyle = '#C62828';
-            ctx.beginPath();
-            ctx.moveTo(-20, 0); ctx.lineTo(-13, -5.5); ctx.lineTo(-9, -1.2);
-            ctx.closePath(); ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(-20, 0); ctx.lineTo(-13, 5.5); ctx.lineTo(-9, 1.2);
-            ctx.closePath(); ctx.fill();
-        } else if (this.kind === 'fire') {
-            const r = (10 + Math.sin(this.life * 30) * 2) * k;
-            ctx.globalCompositeOperation = 'lighter';
-            const grd = ctx.createRadialGradient(x, y, 1, x, y, r * 2.1);
-            grd.addColorStop(0, 'rgba(255,240,190,0.95)');
-            grd.addColorStop(0.4, 'rgba(255,130,40,0.7)');
-            grd.addColorStop(1, 'rgba(200,40,0,0)');
-            ctx.fillStyle = grd;
-            ctx.beginPath(); ctx.arc(x, y, r * 2.1, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#FFF3C4';
-            ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, TAU); ctx.fill();
-        } else {
-            // 妖术弹
-            ctx.globalCompositeOperation = 'lighter';
-            const r = (9 + Math.sin(this.life * 22) * 2) * k;
-            const grd = ctx.createRadialGradient(x, y, 1, x, y, r * 2);
-            grd.addColorStop(0, U.rgba('#FFFFFF', 0.95));
-            grd.addColorStop(0.35, U.rgba(this.color, 0.8));
-            grd.addColorStop(1, U.rgba(this.color, 0));
-            ctx.fillStyle = grd;
-            ctx.beginPath(); ctx.arc(x, y, r * 2, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, TAU); ctx.fill();
-            // 环绕符文
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = U.rgba(this.color, 0.8);
-            ctx.lineWidth = 1.6 * k;
-            ctx.beginPath();
-            ctx.ellipse(x, y, r * 1.5, r * 0.7, this.life * 6, 0, TAU);
-            ctx.stroke();
-        }
-        ctx.restore();
+    _kill() {
+        if (this.dead) return;
+        this.dead = true;
+        this.stage.scene.remove(this.group);
+        this.group.traverse(o => { if (o.isMesh) o.geometry.dispose && o.geometry.dispose(); });
     }
 }

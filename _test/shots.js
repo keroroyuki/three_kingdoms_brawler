@@ -2,14 +2,14 @@
  * 用法: node _test/shots.js [name]   name 省略则全抓
  */
 'use strict';
-const { chromium } = require(process.env.PW_PATH || 'playwright-core');
+const { chromium } = require('./pw');
 const CHROME = process.env.CHROME_BIN || 'C:/Users/14512/.agent-browser/browsers/chrome-152.0.7977.64/chrome.exe';
 const URL = process.env.GAME_URL || 'file:///D:/tmp/work/three_kingdoms_brawler/index.html';
 const OUT = 'D:/tmp/work/three_kingdoms_brawler/_shots';
 const only = process.argv[2];
 
 (async () => {
-    const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu', '--mute-audio'] });
+    const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox','--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader','--mute-audio'] });
     const page = await browser.newPage({ viewport: { width: 900, height: 720 } });
     await page.goto(URL, { waitUntil: 'load', timeout: 30000 });
     await page.waitForFunction('window.GAME && window.GAME.frames > 5', {}, { timeout: 5000 });
@@ -30,12 +30,17 @@ const only = process.argv[2];
     for (const lv of [0, 1, 2]) {
         const tag = ['06_lv1', '07_lv2', '08_lv3'][lv];
         if (!want(tag)) continue;
+        // 走游戏自己的闸门逻辑触发 BOSS 入场，别再手动 new Boss
         await page.evaluate(`(() => {
-            const g = window.GAME; g.loadLevel(${lv}); g.state = "play"; g.input.flush();
-            g.cam.x = 6;
-            g.player.x = 6; g.player.z = 1.9; g.player.facing = 1;
-            g.player.state = "idle"; g.player.pose = null;
-            g.projectiles.length = 0; g.items.length = 0;
+            const g = window.GAME;
+            g.loadLevel(${lv}); g.state = 'play'; g.input.flush();
+            const b = g.level.boss;
+            g.gateIndex = g.level.waves.length;
+            g.waveState = 'open';
+            g.arena = { min: b.at - 7, max: b.at + 7 };   // 先放开竞技场，否则主角会被钳在上一波的位置
+            g.player.x = b.at + 0.4; g.player.z = 1.9; g.player.facing = 1;
+            g.cam.x = b.at + 0.4;
+            g.actors.length = 0; g.spawnQueue.length = 0;
         })()`);
         await page.waitForTimeout(500);
         // 摆几个敌人做构图
@@ -59,19 +64,17 @@ const only = process.argv[2];
             const g = window.GAME; g.loadLevel(${lv}); g.state = "play"; g.input.flush();
             g.cam.x = 8; g.player.x = 8; g.player.z = 1.9; g.player.facing = 1;
             g.player.think = function () {};          // 冻结玩家 AI
-            g.player.pose = Fig.idle(0.5, g.player.look);
             // 直接实例化 BOSS（绕开 startBoss 的入场动画与战场位移逻辑）
             const key = ["zhangjue", "zhangbao", "tianmo"][${lv}];
             const b = new Boss(g, { look: key, x: 11.4, z: 1.9, facing: -1 });
             b.entering = false; b.enterT = 99; b.invuln = 99; b.current = null;
             b.state = "idle"; b.stateT = 0; b.actionCd = 99;
-            b.think = function () { b.pose = Fig.idle(b.time + 0.5, b.look); };
             b.hp = b.maxHp;
             g.boss = b; g.bossActive = true; g.waveState = "boss";
             g.actors.push(b);
             g.projectiles.length = 0; g.spawnQueue.length = 0;
         })()`);
-        await page.waitForTimeout(900);
+        await page.waitForTimeout(2600);
         await shot(tag);
     }
 
