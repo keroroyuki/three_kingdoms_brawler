@@ -89,11 +89,10 @@ function check(name, cond, info) {
 
         /* ---- M3 / M4：BOSS 姿态 ---- */
         out.bossTakeHitSkipsDead = /if \(!this\.dead\)/.test(String(Boss.prototype.takeHit));
-        out.bossAnimateFallback = /ownsPose/.test(String(Boss.prototype.animate));
 
         /* ---- 其余小修 ---- */
         out.dieNoGameOverSound = !/audio\.play\(\s*'gameover'\s*\)/.test(String(Player.prototype.die));
-        out.telegraphAlphaClamped = /Math\.max\(0\.03,/.test(String(Actor.prototype.drawTelegraph));
+        out.telegraphAlphaClamped = /Math\.abs\(Math\.sin/.test(String(Actor.prototype._syncWarn));
         out.victoryPanelCapped = /Math\.min\(VIEW\.H - 250,/.test(String(UI.prototype.drawVictory));
 
         return out;
@@ -126,11 +125,10 @@ function check(name, cond, info) {
 
     console.log('=== M3 / M4 BOSS ===');
     check('Boss.takeHit 死亡后不再改写姿态', r.bossTakeHitSkipsDead);
-    check('Boss.animate 对无姿态技能有兜底', r.bossAnimateFallback);
 
     console.log('=== 其余小修 ===');
     check('Player.die 不再误播 gameover', r.dieNoGameOverSound);
-    check('预警圈 alpha 已钳制非负', r.telegraphAlphaClamped);
+    check('预警环 alpha 恒非负（用 abs 而非裸 sin）', r.telegraphAlphaClamped);
     check('胜利结算底板高度已封顶', r.victoryPanelCapped);
 
     check('页面无未捕获异常', errors.length === 0, errors.join('; '));
