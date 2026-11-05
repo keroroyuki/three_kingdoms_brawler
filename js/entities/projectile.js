@@ -3,6 +3,15 @@
  * ============================================================ */
 'use strict';
 
+/* 投射物共享资源：箭每帧都可能生成，绝不能每发都新建几何/材质并泄漏。
+   这些资源随页面常驻，数量固定（箭 ×1、核心 ×1、外壳/光晕按颜色 ×N）。 */
+const PROJ_ASSETS = {
+    arrowGeo: null, arrowMat: null,
+    coreGeo: null, coreMat: null,
+    shellGeo: null, shellMat: new Map(),
+    haloMat: new Map()
+};
+
 class Projectile {
     constructor(game, cfg) {
         this.game = game;
@@ -30,34 +39,46 @@ class Projectile {
     _build() {
         const G = TK.G;
         if (this.kind === 'arrow') {
-            const parts = [
-                G.at(G.cyl(0.012, 0.012, 0.52, '#6D4C33', 6), 0, 0, 0, 0, 0, Math.PI / 2),
-                G.at(G.cone(0.035, 0.14, '#D6DBE0', 4), 0.32, 0, 0, 0, 0, -Math.PI / 2, 0.5, 1, 0.5),
-                G.at(G.box(0.10, 0.09, 0.012, '#C62828'), -0.22, 0, 0, 0, 0, 0.2),
-                G.at(G.box(0.10, 0.012, 0.09, '#C62828'), -0.22, 0, 0, 0, 0, 0.2)
-            ];
-            const m = new THREE.Mesh(G.merge(parts), new THREE.MeshToonMaterial({
-                vertexColors: true, gradientMap: TK.gradient
-            }));
-            this.group.add(m);
+            if (!PROJ_ASSETS.arrowGeo) {
+                const parts = [
+                    G.at(G.cyl(0.012, 0.012, 0.52, '#6D4C33', 6), 0, 0, 0, 0, 0, Math.PI / 2),
+                    G.at(G.cone(0.035, 0.14, '#D6DBE0', 4), 0.32, 0, 0, 0, 0, -Math.PI / 2, 0.5, 1, 0.5),
+                    G.at(G.box(0.10, 0.09, 0.012, '#C62828'), -0.22, 0, 0, 0, 0, 0.2),
+                    G.at(G.box(0.10, 0.012, 0.09, '#C62828'), -0.22, 0, 0, 0, 0, 0.2)
+                ];
+                PROJ_ASSETS.arrowGeo = G.merge(parts);
+            }
+            if (!PROJ_ASSETS.arrowMat) {
+                PROJ_ASSETS.arrowMat = new THREE.MeshToonMaterial({
+                    vertexColors: true, gradientMap: TK.gradient
+                });
+            }
+            this.group.add(new THREE.Mesh(PROJ_ASSETS.arrowGeo, PROJ_ASSETS.arrowMat));
         } else {
             // 火球 / 妖术弹：内芯 + 外晕
             const col = this.kind === 'fire' ? '#FFB347' : this.color;
-            const core = new THREE.Mesh(
-                new THREE.SphereGeometry(0.10, 12, 8),
-                new THREE.MeshBasicMaterial({ color: new THREE.Color('#FFF3C4') })
-            );
-            const shell = new THREE.Mesh(
-                new THREE.SphereGeometry(0.20, 12, 8),
-                new THREE.MeshBasicMaterial({
+            PROJ_ASSETS.coreGeo = PROJ_ASSETS.coreGeo || new THREE.SphereGeometry(0.10, 12, 8);
+            PROJ_ASSETS.coreMat = PROJ_ASSETS.coreMat || new THREE.MeshBasicMaterial({ color: new THREE.Color('#FFF3C4') });
+            PROJ_ASSETS.shellGeo = PROJ_ASSETS.shellGeo || new THREE.SphereGeometry(0.20, 12, 8);
+            let shellMat = PROJ_ASSETS.shellMat.get(col);
+            if (!shellMat) {
+                shellMat = new THREE.MeshBasicMaterial({
                     color: new THREE.Color(col), transparent: true, opacity: 0.55,
                     blending: THREE.AdditiveBlending, depthWrite: false
-                })
-            );
-            const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-                map: TK.glowTex(), color: new THREE.Color(col), blending: THREE.AdditiveBlending,
-                transparent: true, depthWrite: false, opacity: 0.9
-            }));
+                });
+                PROJ_ASSETS.shellMat.set(col, shellMat);
+            }
+            let haloMat = PROJ_ASSETS.haloMat.get(col);
+            if (!haloMat) {
+                haloMat = new THREE.SpriteMaterial({
+                    map: TK.glowTex(), color: new THREE.Color(col), blending: THREE.AdditiveBlending,
+                    transparent: true, depthWrite: false, opacity: 0.9
+                });
+                PROJ_ASSETS.haloMat.set(col, haloMat);
+            }
+            const core = new THREE.Mesh(PROJ_ASSETS.coreGeo, PROJ_ASSETS.coreMat);
+            const shell = new THREE.Mesh(PROJ_ASSETS.shellGeo, shellMat);
+            const halo = new THREE.Sprite(haloMat);
             halo.scale.setScalar(0.9);
             this.group.add(core, shell, halo);
             this.core = core; this.shell = shell; this.halo = halo;
@@ -82,6 +103,7 @@ class Projectile {
 
         if (this.kind === 'arrow') this.vy -= 1.6 * dt;
 
+        const prevX = this.x;
         this.x += this.vx * dt;
         this.z += this.vz * dt;
         this.y += this.vy * dt;
@@ -98,9 +120,13 @@ class Projectile {
         const ar = this.game.arena;
         if (ar && (this.x < ar.min - 2 || this.x > ar.max + 2)) { this._kill(); return; }
 
+        // 用本帧的位移线段做扫掠检测：箭速 11+，低帧率下一帧就能跨过半个身位，
+        // 只比对当前点会让箭“穿人而过”。
+        const midX = (prevX + this.x) * 0.5;
+        const halfSpan = Math.abs(this.x - prevX) * 0.5;
         for (const e of this.game.actors) {
             if (e.team === this.team || e.dead || e === this.owner) continue;
-            if (Math.abs(e.x - this.x) > (e.rx + 0.14)) continue;
+            if (Math.abs(e.x - midX) > (e.rx + 0.14) + halfSpan) continue;
             if (Math.abs(e.z - this.z) > 0.42) continue;
             const feetY = e.y, topY = e.y + 1.75 * e.rigScale;
             if (this.y < feetY - 0.15 || this.y > topY) continue;
@@ -151,6 +177,6 @@ class Projectile {
         if (this.dead) return;
         this.dead = true;
         this.stage.scene.remove(this.group);
-        this.group.traverse(o => { if (o.isMesh) o.geometry.dispose && o.geometry.dispose(); });
+        // 几何/材质为跨关卡共享资源，不能在这里 dispose
     }
 }

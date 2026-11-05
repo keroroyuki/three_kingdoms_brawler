@@ -14,6 +14,16 @@ const ST = {
     CLEAR: 'clear', RESULT: 'result', VICTORY: 'victory'
 };
 
+/**
+ * 难度档位：只调整敌军血量、攻击力与同时出手人数，不改玩家的数值，
+ * 这样三档之间的手感差异来自"敌人压迫感"而不是"自己的武将变弱了"。
+ */
+const DIFFICULTY = [
+    { key: 'easy', name: '简单', sub: '敌军势弱，可安心熟悉招式', hp: 0.78, atk: 0.70, tokens: -1 },
+    { key: 'normal', name: '普通', sub: '标准强度，攻守需讲分寸', hp: 1.00, atk: 1.00, tokens: 0 },
+    { key: 'hard', name: '困难', sub: '敌军蜂拥，一着不慎即破防', hp: 1.30, atk: 1.32, tokens: 1 }
+];
+
 class Game {
     constructor(canvas, uiCanvas) {
         this.canvas = canvas;
@@ -24,6 +34,9 @@ class Game {
         /** 最高战功（localStorage 持久化）；file:// 或隐私模式下可能不可用 */
         this.bestScore = Game.loadBest();
         this.newRecord = false;
+        /** 难度（同样持久化，下次进游戏沿用上次的选择） */
+        this.diffIndex = Game.loadDiff();
+        this.diff = DIFFICULTY[this.diffIndex];
 
         this.input = new InputManager();
         this.audio = new AudioEngine();
@@ -84,6 +97,7 @@ class Game {
 
     /* ---------------- 最高战功持久化 ---------------- */
     static BEST_KEY = 'sgzj.bestScore';
+    static DIFF_KEY = 'sgzj.diffIndex';
 
     static loadBest() {
         try {
@@ -92,6 +106,21 @@ class Game {
         } catch (e) {
             return 0; // file:// 受限或隐私模式：静默降级为不记录
         }
+    }
+
+    static loadDiff() {
+        try {
+            const v = parseInt(window.localStorage.getItem(Game.DIFF_KEY) || '1', 10);
+            return v >= 0 && v < DIFFICULTY.length ? v : 1;
+        } catch (e) {
+            return 1;
+        }
+    }
+
+    setDiff(i) {
+        this.diffIndex = U.clamp(i, 0, DIFFICULTY.length - 1);
+        this.diff = DIFFICULTY[this.diffIndex];
+        try { window.localStorage.setItem(Game.DIFF_KEY, String(this.diffIndex)); } catch (e) { /* 忽略 */ }
     }
 
     /** 结算时调用；返回是否破纪录 */
@@ -200,7 +229,11 @@ class Game {
             if (o.geometry && o.geometry.dispose) o.geometry.dispose();
             const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
             for (const m of mats) {
-                // 贴图可能是模块级共享（如色阶、光晕），这里只释放材质本身
+                // 模块级共享资源（色阶、描边、光晕、阴影贴图）不能在这里释放，
+                // 否则切到下一关后所有描边/光晕都会失效并触发重编译卡顿。
+                if (!m || m.__shared) continue;
+                if (m.map && m.map.__shared !== true) m.map.dispose();
+                if (m.gradientMap && m.gradientMap.__shared !== true) m.gradientMap.dispose();
                 if (m.dispose) m.dispose();
             }
         });
@@ -250,7 +283,8 @@ class Game {
         this.titleIndex = 0;
         this.t = 0;
         this.cam.x = 12;
-        this._setShowcase(['guanyu']);
+        // 展示"开始征战"实际会使用的武将，避免标题里的角色和开局角色对不上
+        this._setShowcase([this.heroKey || 'guanyu']);
         this.input.flush();
     }
 
@@ -279,6 +313,8 @@ class Game {
     }
 
     returnToTitle() {
+        // 中途退出也应结算最高战功，否则玩家放弃本局时分数白打
+        if (this.player) this.commitScore(this.player.score);
         this._clearShowcase();
         this._disposeLevel();
         this.levelIndex = 0;
@@ -337,7 +373,11 @@ class Game {
         this.levelIndex = i;
         this.level = LEVELS[i];
         const S = LEVEL_SCALE[Math.min(i, LEVEL_SCALE.length - 1)];
-        this.scaleHp = S.hp; this.scaleAtk = S.atk; this.maxTokens = S.tokens;
+        const D = this.diff || DIFFICULTY[1];
+        // 关卡成长与本局难度相乘；同时出手的敌人数量也随难度增减
+        this.scaleHp = S.hp * D.hp;
+        this.scaleAtk = S.atk * D.atk;
+        this.maxTokens = Math.max(1, S.tokens + D.tokens);
 
         this._clearShowcase();
         this._disposeLevel();
@@ -352,12 +392,20 @@ class Game {
         if (this.player) {
             p.lives = this.player.lives;
             p.score = this.player.score;
+            p.rage = this.player.rage;
             p.comboBest = this.player.comboBest;
             p.hitsLanded = this.player.hitsLanded;
             p.perfectGuards = this.player.perfectGuards;
         }
         this.player = p;
         this.actors.push(p);
+
+        // 本关入场存档：暂停菜单「重新挑战」回到这里，避免靠反复重开刷分
+        this.levelCheckpoint = {
+            score: p.score, rage: p.rage, comboBest: p.comboBest,
+            hitsLanded: p.hitsLanded, perfectGuards: p.perfectGuards,
+            killCount: this.killCount
+        };
 
         // 场景道具
         for (const pr of this.level.props) {
@@ -410,6 +458,7 @@ class Game {
     }
 
     updateWaves(dt) {
+        this._updateBossFocus();
         const p = this.player;
         if (!p || p.dead) return;
 
@@ -447,6 +496,15 @@ class Game {
         }
     }
 
+    /** BOSS 登场时压低杂兵的视觉权重，避免小兵和敌将抢同一档亮度 */
+    _updateBossFocus() {
+        const on = this.bossActive && this.boss && !this.boss.dead;
+        for (const a of this.actors) {
+            if (a.team !== TEAM.FOE || a === this.boss) continue;
+            a.dimmed = on;
+        }
+    }
+
     startWave(gate) {
         this.waveState = 'fight';
         this.gateX = gate.at;
@@ -466,6 +524,10 @@ class Game {
         const p = this.player;
         p.score += 800;
         p.addRage(12);
+        // 波次结束到下一波之间有 0.9s 的空档，残留箭矢仍会飞过来；
+        // 这在“肃清”提示之后被打死非常出戏，直接清空并给短暂无敌。
+        for (const pr of this.projectiles) if (pr.team !== p.team) pr._kill();
+        p.invuln = Math.max(p.invuln, 1.2);
         // 掉落奖励
         const kind = U.pick(['baozi', 'gold', 'wine', 'baozi', 'roast']);
         this.dropItem(kind, p.x + 1.2, U.clamp(p.z, 0.6, 3.0));
@@ -481,7 +543,12 @@ class Game {
         this.softArena = { min: b.at - 8.5, max: b.at + 8.5 };
         // 入场位置不能超出关卡右界，否则 BOSS 会贴着屏幕右缘只露半个身子
         const spawnX = Math.min(b.at + 3.4, this.level.length - 1.2);
-        const boss = new Boss(this, { look: b.type, x: spawnX, z: 1.9, facing: -1, lockX: b.at });
+        const boss = new Boss(this, {
+            look: b.type, x: spawnX, z: 1.9, facing: -1, lockX: b.at,
+            // BOSS 不叠加关卡成长（原本就按最终数值设计），只吃难度系数
+            hpMul: (this.diff || DIFFICULTY[1]).hp,
+            atkMul: (this.diff || DIFFICULTY[1]).atk
+        });
         this.boss = boss;
         this.actors.push(boss);
         this.audio.playMusic('boss');
@@ -496,6 +563,12 @@ class Game {
     onBossDefeated() {
         const p = this.player;
         p.score += 5000;
+        // 敌将已倒，杂兵恢复原本亮度（清场庆祝时不该再压暗）
+        for (const a of this.actors) a.dimmed = false;
+        // 清掉场上残留的敌方投射物，并给玩家一段无敌时间：
+        // 结算前被最后一发妖术弹打死是最挫败的体验。
+        for (const pr of this.projectiles) if (pr.team !== p.team) pr._kill();
+        p.invuln = Math.max(p.invuln, 3.6);
         this.audio.playMusic(this.level.music);
         this.audio.play('victory');
         this.fx.addFlash(0.85, '#FFE9A8');
@@ -568,6 +641,9 @@ class Game {
         this.state = ST.RESULT;
         this.resultT = 0;
         this.win = false;
+        // 结算面板会盖在尸体上，"最高战功"等文字会和角色模型叠在一起，
+        // 这里通过 hideRig 让渲染层跳过阵亡的玩家模型（rig 每帧重算 visible）。
+        if (this.player) this.player.hideRig = true;
         this.commitScore(this.player ? this.player.score : 0);
         this.audio.playMusic(null);
         this.audio.play('gameover');
@@ -658,7 +734,11 @@ class Game {
                 this.resultT += dt;
                 this.fx.update(dt * 0.6);
                 if (this.resultT > 0.6) {
-                    if (this.input.justPressed('start') || this.input.justPressed('pause')) {
+                    // 与界面文案一致：Enter 用同一武将重开，Esc 回标题
+                    if (this.input.justPressed('start')) {
+                        this.startGame(this.heroKey);
+                        this.input.flush();
+                    } else if (this.input.justPressed('pause')) {
                         this.returnToTitle();
                     }
                 }
@@ -685,9 +765,14 @@ class Game {
                 if (inp.justPressed('down')) { this.titleIndex = (this.titleIndex + 1) % 3; this.audio.play('cursor'); }
                 if (inp.justPressed('start')) {
                     this.audio.play('confirm');
-                    if (this.titleIndex === 0) { this._enterSelect(); }
-                    else if (this.titleIndex === 1) { this._enterSelect(); }
-                    else { this.state = ST.HELP; }
+                    if (this.titleIndex === 0) {
+                        // 开始征战 = 用上次选择的武将直接开打
+                        this.startGame(this.heroKey);
+                    } else if (this.titleIndex === 1) {
+                        this._enterSelect();
+                    } else {
+                        this.state = ST.HELP;
+                    }
                     this.input.flush();
                 }
                 break;
@@ -696,9 +781,13 @@ class Game {
                     this.state = ST.TITLE; this.audio.play('confirm'); this.input.flush();
                 }
                 break;
-            case ST.SELECT:
-                if (inp.justPressed('left')) { this.selectIndex = (this.selectIndex + 4) % 5; this.audio.play('cursor'); }
-                if (inp.justPressed('right')) { this.selectIndex = (this.selectIndex + 1) % 5; this.audio.play('cursor'); }
+            case ST.SELECT: {
+                const n = Object.keys(HERO_KIT).length;
+                if (inp.justPressed('left')) { this.selectIndex = (this.selectIndex + n - 1) % n; this.audio.play('cursor'); }
+                if (inp.justPressed('right')) { this.selectIndex = (this.selectIndex + 1) % n; this.audio.play('cursor'); }
+                // ↑↓ 切难度：选人页两轴分工，方向键左右管武将，上下管难度
+                if (inp.justPressed('up')) { this.setDiff(this.diffIndex - 1); this.audio.play('cursor'); }
+                if (inp.justPressed('down')) { this.setDiff(this.diffIndex + 1); this.audio.play('cursor'); }
                 if (inp.justPressed('pause')) { this.state = ST.TITLE; this.audio.play('confirm'); this.input.flush(); }
                 if (inp.justPressed('start')) {
                     this.audio.play('confirm');
@@ -706,6 +795,7 @@ class Game {
                     this.input.flush();
                 }
                 break;
+            }
             case ST.PLAY:
                 if (inp.justPressed('pause')) {
                     this.state = ST.PAUSE; this.pauseIndex = 0;
@@ -722,7 +812,20 @@ class Game {
                     this.audio.resume();
                     this.input.flush();
                     if (this.pauseIndex === 0) this.state = ST.PLAY;
-                    else if (this.pauseIndex === 1) { this.player.lives = Math.max(1, this.player.lives); this.loadLevel(this.levelIndex); }
+                    else if (this.pauseIndex === 1) {
+                        // 回到本关入场状态，防止重复刷同一波敌人涨战功
+                        const cp = this.levelCheckpoint;
+                        if (cp && this.player) {
+                            this.player.score = cp.score;
+                            this.player.rage = cp.rage;
+                            this.player.comboBest = cp.comboBest;
+                            this.player.hitsLanded = cp.hitsLanded;
+                            this.player.perfectGuards = cp.perfectGuards;
+                            this.killCount = cp.killCount;
+                        }
+                        this.player.lives = Math.max(1, this.player.lives);
+                        this.loadLevel(this.levelIndex);
+                    }
                     else if (this.pauseIndex === 2) { this.returnToTitle(); }
                     else { this.audio.setMuted(!this.audio.muted); if (!this.audio.muted) this.audio.playMusic(this.bossActive ? 'boss' : this.level.music); }
                 }
@@ -818,15 +921,18 @@ class Game {
                 if (a.y > 0.7 || b.y > 0.7) continue;
                 const dx = b.x - a.x;
                 const dz = b.z - a.z;
-                const mx = a.rx + b.rx;
-                const mz = a.rz + b.rz;
+                // 留一点额外间距：rx 只是判定半径，模型实际更宽，
+                // 完全贴合的两个人会在同深度下糊成一团。
+                const mx = a.rx + b.rx + 0.05;
+                const mz = a.rz + b.rz + 0.04;
                 if (Math.abs(dx) >= mx || Math.abs(dz) >= mz) continue;
                 const pushX = (mx - Math.abs(dx)) * 0.5 * (dx < 0 ? -1 : 1);
                 const pushZ = (mz - Math.abs(dz)) * 0.5 * (dz < 0 ? -1 : 1);
                 const wa = b.mass / (a.mass + b.mass), wb = a.mass / (a.mass + b.mass);
-                // 攻击中的角色不被推动（保持打击感）
-                const aFix = (a.atkDef || a.state === 'charge') ? 0 : 1;
-                const bFix = (b.atkDef || b.state === 'charge') ? 0 : 1;
+                // 出招中的角色只减弱推挤而不是完全免疫，
+                // 否则多个敌人同帧挥刀时会完全叠在玩家身上。
+                const aFix = (a.atkDef || a.state === 'charge') ? 0.3 : 1;
+                const bFix = (b.atkDef || b.state === 'charge') ? 0.3 : 1;
                 a.x -= pushX * wa * aFix; a.z -= pushZ * wa * aFix;
                 b.x += pushX * wb * bFix; b.z += pushZ * wb * bFix;
                 a.z = U.clamp(a.z, GROUND.zMin, GROUND.zPlayMax);
@@ -898,7 +1004,7 @@ class Game {
             { x: this.arena.min, dir: -1 },
             { x: this.arena.max, dir: 1 }
         ];
-        const t = this.time;
+        const t = this.playTime;
         for (const e of edges) {
             this.stage.project(e.x, 2.55, 1.8, p);
             this.stage.project(e.x, 0.0, 1.8, pb);
@@ -937,13 +1043,45 @@ class Game {
     }
 
     drawVignette(ctx) {
-        ctx.save();
-        const g = ctx.createRadialGradient(VIEW.W / 2, VIEW.H / 2, VIEW.H * 0.42, VIEW.W / 2, VIEW.H / 2, VIEW.H * 0.95);
-        g.addColorStop(0, 'rgba(0,0,0,0)');
-        g.addColorStop(1, 'rgba(0,0,0,0.42)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, VIEW.W, VIEW.H);
-        ctx.restore();
+        // 暗角是固定画面元素，没必要每帧重建一个 800x600 的径向渐变
+        if (!this._vignette) {
+            const c = document.createElement('canvas');
+            c.width = VIEW.W; c.height = VIEW.H;
+            const x = c.getContext('2d');
+            const g = x.createRadialGradient(VIEW.W / 2, VIEW.H / 2, VIEW.H * 0.42, VIEW.W / 2, VIEW.H / 2, VIEW.H * 0.95);
+            g.addColorStop(0, 'rgba(0,0,0,0)');
+            g.addColorStop(1, 'rgba(0,0,0,0.42)');
+            x.fillStyle = g;
+            x.fillRect(0, 0, VIEW.W, VIEW.H);
+            // 前景压暗：底部的近景草带原来比战场还亮，会把视线从角色身上拉走
+            const bg = x.createLinearGradient(0, VIEW.H * 0.70, 0, VIEW.H);
+            bg.addColorStop(0, 'rgba(0,0,0,0)');
+            bg.addColorStop(1, 'rgba(0,0,0,0.30)');
+            x.fillStyle = bg;
+            x.fillRect(0, VIEW.H * 0.70, VIEW.W, VIEW.H * 0.30);
+            this._vignette = c;
+        }
+        ctx.drawImage(this._vignette, 0, 0, VIEW.W, VIEW.H);
+
+        // 低血量警示：残血时屏幕四周缓慢起伏的红晕，比只看血条更有压迫感
+        const p = this.player;
+        if (this.state === ST.PLAY && p && !p.dead && p.hp / p.maxHp < 0.28) {
+            if (!this._dangerVignette) {
+                const c = document.createElement('canvas');
+                c.width = VIEW.W; c.height = VIEW.H;
+                const x = c.getContext('2d');
+                const g = x.createRadialGradient(VIEW.W / 2, VIEW.H / 2, VIEW.H * 0.24, VIEW.W / 2, VIEW.H / 2, VIEW.H * 0.86);
+                g.addColorStop(0, 'rgba(180,20,20,0)');
+                g.addColorStop(1, 'rgba(180,20,20,0.85)');
+                x.fillStyle = g;
+                x.fillRect(0, 0, VIEW.W, VIEW.H);
+                this._dangerVignette = c;
+            }
+            ctx.save();
+            ctx.globalAlpha = 0.16 + Math.sin(this.playTime * 5.2) * 0.08;
+            ctx.drawImage(this._dangerVignette, 0, 0, VIEW.W, VIEW.H);
+            ctx.restore();
+        }
     }
 
     /* ---------------- 对外便捷接口（UI / 实体回调） ---------------- */

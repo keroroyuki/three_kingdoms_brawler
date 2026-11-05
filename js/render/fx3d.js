@@ -5,6 +5,15 @@
  * ============================================================ */
 'use strict';
 
+/* 粒子颜色按字符串缓存：爆点一次 emit 几十颗，原来的 new THREE.Color 会
+   在每次命中时制造大量短命对象。 */
+const _FX_COLORS = new Map();
+function FX_COLOR(str) {
+    let c = _FX_COLORS.get(str);
+    if (!c) { c = new THREE.Color(str); _FX_COLORS.set(str, c); }
+    return c;
+}
+
 class FX3D {
     constructor(stage) {
         this.stage = stage;
@@ -113,7 +122,7 @@ class FX3D {
         p.max = o.life || 0.5;
         p.drag = o.drag == null ? 1 : o.drag;
         p.shrink = o.shrink !== false;
-        const c = new THREE.Color(o.color || '#FFFFFF');
+        const c = FX_COLOR(o.color || '#FFFFFF');
         p.r = c.r; p.gg = c.g; p.b = c.b;
         return p;
     }

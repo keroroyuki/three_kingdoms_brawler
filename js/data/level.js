@@ -48,9 +48,10 @@ const LEVELS = [
         palette: {
             skyTop: '#2A1730', skyBottom: '#C4512B', sun: '#FF9A4D', sunPos: [0.28, 0.55],
             fog: '#6B3226', fogNear: 18, fogFar: 68,
-            ground: '#6B5C46', groundAlt: '#584B38', path: '#8A6E52', pathAlt: '#766044',
+            ground: '#7A674F', groundAlt: '#655441', path: '#9A7A5A', pathAlt: '#856A4C',
             rock: '#4A4040', wood: '#3E2A22', leaf: '#3B3A26', leaf2: '#4C4429', bloom: '#C2573A',
-            hemiSky: '#B06A4A', hemiGround: '#3A2418', dir: '#FFC08A', ambient: 0.44, hemiInt: 0.40,
+            hemiSky: '#B06A4A', hemiGround: '#3A2418', dir: '#FFC08A',
+            ambient: 0.26, hemiInt: 0.22, keyInt: 1.00, rimInt: 0.55,
             lantern: '#FF8A3C'
         },
         props: [
@@ -82,7 +83,8 @@ const LEVELS = [
             fog: '#141A30', fogNear: 20, fogFar: 74,
             ground: '#6B7286', groundAlt: '#585E72', path: '#828799', pathAlt: '#6E7386',
             rock: '#4C5060', wood: '#6B2B2B', leaf: '#2A3A34', leaf2: '#33463C', bloom: '#D8B25A',
-            hemiSky: '#5A6A96', hemiGround: '#262C3E', dir: '#AFC4F0', ambient: 0.34, hemiInt: 0.32,
+            hemiSky: '#5A6A96', hemiGround: '#262C3E', dir: '#AFC4F0',
+            ambient: 0.24, hemiInt: 0.20, keyInt: 0.98, rimInt: 0.55,
             lantern: '#FFB74D'
         },
         props: [

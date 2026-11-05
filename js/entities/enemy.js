@@ -39,6 +39,9 @@ class Enemy extends Actor {
         this.guardT = 0;
         this.deadTimer = 0;
         this.aggro = 0.55 + U.rand(0, 0.35);
+        // 每个兵种记住自己的纵深站位：否则所有敌人都贴着玩家同一条 z 线，
+        // 一拥而上时在屏幕上叠成一坨，既看不清谁在出招，也看不出兵种。
+        this.zBias = U.rand(-0.32, 0.32);
         this.scoreValue = cfg.score || Math.round(this.maxHp * 4);
         this.dropTable = cfg.drop || null;
 
@@ -108,10 +111,19 @@ class Enemy extends Actor {
             const d = this.atkDef;
             if (!this.atkHitDone && this.stateT >= d.hitAt) {
                 this.doHitCheck();
-                if (this.atkDef.aoe) this.hitRadial(this.atkDef.aoe);
+                // doHitCheck 里可能被完美格挡打断并把 atkDef 清空，必须用局部 d
+                if (this.atkDef && d.aoe) this.hitRadial(d.aoe);
             }
             if (this.stateT >= d.dur) {
                 this.atkDef = null;
+                // 精英的 combo:2 之前只是写进字段、从未生效；
+                // 现在真的接上第二刀，形成两连挥。
+                if (this.meleeQueue > 1 && this.hasToken) {
+                    this.meleeQueue--;
+                    this.startMeleeSwing();
+                    return;
+                }
+                this.meleeQueue = 0;
                 this.setState('idle');
                 this.releaseToken();
                 this.attackCd = d.recover != null ? d.recover : this.ai.recover;
@@ -133,7 +145,8 @@ class Enemy extends Actor {
 
         const dx = t.x - this.x;
         const adx = Math.abs(dx);
-        const dz = t.z - this.z;
+        // 站位带一点个人偏差，避免多人同一条纵深线
+        const dz = U.clamp(t.z + this.zBias, GROUND.zMin, GROUND.zMax) - this.z;
         this.facing = U.sign(dx) || this.facing;
 
         const A = this.ai;
@@ -155,6 +168,11 @@ class Enemy extends Actor {
                 this.strafe(dt, t);
                 if (this.attackCd <= 0 && Math.abs(dz) < 1.1 && this.tryToken()) {
                     this.beginRanged(t);
+                } else if (Math.abs(dz) >= 1.1) {
+                    // 玩家与自己错开深度时不要干站着：缓慢贴近 z 轴，
+                    // 否则远程兵会一直停在原地，形成软锁。
+                    this.move(0, U.sign(dz) * this.spd * 0.5);
+                    this.setState('walk');
                 } else {
                     this.setState('idle');
                 }
@@ -479,11 +497,18 @@ class Boss extends Enemy {
             this.forceState('idle');
         }
         if (this.state === 'hurt' && this.stateT > 0.12) this.setState('idle');
+        // BOSS 之前没有 stagger 分支：完美格挡/阶段切换写入的硬直
+        // 不会阻止它继续释放技能。
+        if (this.state === 'stagger') {
+            if (this.stateT >= (this.stun || 0.6)) this.setState('idle');
+            return;
+        }
 
         const pi = this.phaseIndex;
         if (pi !== this.phase) {
             this.phase = pi;
             this.onPhaseChange();
+            return; // 阶段切换当帧直接停手，避免硬直里继续出招
         }
 
         if (this.current) { this.tickSkill(dt); return; }
@@ -704,10 +729,14 @@ class Boss extends Enemy {
             const t = this.target;
             for (let i = 0; i < n; i++) {
                 g.schedule(i * 0.16, () => {
+                    if (this.dead) return;
                     const tx = (t && !t.dead ? t.x : this.x + this.facing * 3) + U.rand(-2.6, 2.6);
                     const tz = U.clamp(U.rand(0.5, 3.1), GROUND.zMin, GROUND.zPlayMax);
                     g.fx.beam(tx, tz, s.hue, 0.45);
                     g.schedule(0.22, () => {
+                        // BOSS 已阵亡时残留的陨石不应继续削血，
+                        // 否则玩家会在"已通关"的结算前被空袭打死。
+                        if (this.dead) return;
                         g.fx.fireBurst({ x: tx, y: 0.2, z: tz }, 18, 1.2);
                         g.fx.wave({ x: tx, y: 0, z: tz }, 110, s.hue, 0.4, 5);
                         g.audio.play('thunder');
@@ -735,6 +764,7 @@ class Boss extends Enemy {
             g.audio.play('bossRoar');
             for (let i = 0; i < (s.count || 3); i++) {
                 g.schedule(i * 0.18, () => {
+                    if (this.dead) return;
                     const px = this.x + (i % 2 ? 1 : -1) * U.rand(1.4, 3.0);
                     const pz = U.rand(0.5, 3.1);
                     g.fx.fireBurst({ x: px, y: 0.3, z: pz }, 14, 0.9);
@@ -754,6 +784,10 @@ class Boss extends Enemy {
         g.showBanner(`第 ${this.phase + 1} 阶段`, '#FF8A3C');
         this.invuln = Math.max(this.invuln, 0.7);
         this.actionCd = 0.5;
+        // 阶段切换要打断当前技能，否则 BOSS 会在无敌时间里把上一招打完。
+        this.current = null;
+        this.skillFired = new Set();
+        this.telegraph = 0;
         this.forceState('stagger');
         this.stun = 0.6;
     }

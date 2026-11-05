@@ -228,9 +228,10 @@ async function waitState(page, want, ms, label) {
         const g = window.GAME;
         const inp = g.input;
         const sleep = ms => new Promise(r => setTimeout(r, ms));
-        let atkCount = 0, guardCount = 0, jumpCount = 0;
+        let atkCount = 0, guardCount = 0, jumpCount = 0, ti = 0;
         const t0 = Date.now();
         while (Date.now() - t0 < 10000) {
+            ti++;
             const p = g.player;
             if (!p || p.dead) break;
             let best = null, bd = 1e9;
@@ -240,11 +241,12 @@ async function waitState(page, want, ms, label) {
                 if (d < bd) { bd = d; best = a; }
             }
             if (!best) break;
-            // 对齐纵深
-            if (Math.abs(best.z - p.z) > 0.22) {
-                inp.injectDown(best.z > p.z ? 'down' : 'up');
+            // 对齐纵深：一次 60ms 的轻点常常不够，最多补三次
+            for (let k = 0; k < 3 && Math.abs(best.z - p.z) > 0.22; k++) {
+                const kk = best.z > p.z ? 'down' : 'up';
+                inp.injectDown(kk);
                 await sleep(60);
-                inp.injectUp(best.z > p.z ? 'down' : 'up');
+                inp.injectUp(kk);
             }
             const dx = best.x - p.x;
             const dir = dx > 0 ? 'right' : 'left';
@@ -255,8 +257,10 @@ async function waitState(page, want, ms, label) {
                 atkCount++;
                 await sleep(180);
             }
-            if (atkCount % 7 === 3) { inp.injectDown('guard'); await sleep(160); inp.injectUp('guard'); guardCount++; }
-            if (atkCount % 11 === 5) { inp.injectDown('jump'); inp.injectUp('jump'); jumpCount++; await sleep(120); }
+            // 节奏用独立的 ti，不要挂在 atkCount 上：
+            // 攻击数一旦停止增长，原来的取模条件会恒为真，AI 会卡在反复格挡里
+            if (ti % 12 === 0) { inp.injectDown('guard'); await sleep(160); inp.injectUp('guard'); guardCount++; }
+            if (ti % 20 === 0) { inp.injectDown('jump'); inp.injectUp('jump'); jumpCount++; await sleep(120); }
             await sleep(30);
         }
         const p = g.player;
@@ -423,7 +427,8 @@ async function waitState(page, want, ms, label) {
     check('返回标题', s.state === 'title', s.state);
 
     say('=== 15. 暂停菜单 / 失败结算 ===');
-    // 状态驱动导航：title → select → intro → play
+    // 状态驱动导航：title → select → intro → play（title 第 1 项是快速开始，选人需下移一项）
+    await page.keyboard.press('ArrowDown'); await page.waitForTimeout(120);
     await page.keyboard.press('Enter'); s = await waitState(page, 'select', 4000, 'select');
     check('再次进入选人', s.state === 'select', s.state);
     await page.keyboard.press('Enter'); s = await waitState(page, 'intro', 4000, 'intro');
@@ -447,7 +452,8 @@ async function waitState(page, want, ms, label) {
     check('失败结算生效', s.state === 'result', s.state);
     await shot(page, '18_gameover');
     await page.waitForTimeout(900);
-    await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+    // 结算页：Enter 重开，Esc 回标题
+    await page.keyboard.press('Escape'); await page.waitForTimeout(500);
     s = await probe(page);
     check('失败后返回标题', s.state === 'title', s.state);
 
@@ -470,6 +476,7 @@ async function waitState(page, want, ms, label) {
     check('最高战功已记录', best1 > 0, 'bestScore=' + best1);
 
     // 16c. 新一局不继承上一局分数与命数（原 loadLevel 会从旧 player 复制）
+    await page.keyboard.press('ArrowDown'); await page.waitForTimeout(120);
     await page.keyboard.press('Enter'); s = await waitState(page, 'select', 4000, 'select');
     await page.keyboard.press('Enter'); s = await waitState(page, 'intro', 4000, 'intro');
     await page.keyboard.press('Enter'); s = await waitState(page, 'play', 4000, 'play');

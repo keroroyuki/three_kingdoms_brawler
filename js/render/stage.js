@@ -45,20 +45,22 @@ class Stage {
 
     /* ---------------- 灯光 ---------------- */
     _buildLights() {
-        this.ambient = new THREE.AmbientLight(0xffffff, 0.30);
+        // 原来 ambient 0.30 + hemi 0.22 的底光太高，角色几乎只剩一个色块；
+        // 压低环境光、抬高主光，让 Q 版模型也有明确的受光面与背光面。
+        this.ambient = new THREE.AmbientLight(0xffffff, 0.17);
         this.scene.add(this.ambient);
 
-        this.hemi = new THREE.HemisphereLight(0xbfe2ff, 0x8a7a4e, 0.22);
+        this.hemi = new THREE.HemisphereLight(0xbfe2ff, 0x8a7a4e, 0.16);
         this.scene.add(this.hemi);
 
-        this.key = new THREE.DirectionalLight(0xfff2ce, 0.62);
+        this.key = new THREE.DirectionalLight(0xfff2ce, 0.88);
         this.key.position.set(-6, 12, 9);
         this.scene.add(this.key);
         this.key.target.position.set(0, 0, 1.5);
         this.scene.add(this.key.target);
 
         // 冷色补光：从角色右后方压一道轮廓光，让 Q 版剪影更立体
-        this.rim = new THREE.DirectionalLight(0x9fc6ff, 0.26);
+        this.rim = new THREE.DirectionalLight(0x9fc6ff, 0.40);
         this.rim.position.set(8, 5, -7);
         this.scene.add(this.rim);
     }
@@ -69,11 +71,15 @@ class Stage {
         this.scene.fog.far = p.fogFar != null ? p.fogFar : 80;
         this.renderer.setClearColor(new THREE.Color(p.skyBottom), 1);
 
-        this.ambient.intensity = p.ambient != null ? p.ambient : 0.30;
+        // 默认光比：环境光压低、主光抬高，角色才有受光面/背光面。
+        // 暗色主题（夜战、火攻）可以在 palette 里单独提高 ambient/keyInt。
+        this.ambient.intensity = p.ambient != null ? p.ambient : 0.17;
         this.hemi.color.set(p.hemiSky || '#bfe2ff');
         this.hemi.groundColor.set(p.hemiGround || '#8a7a4e');
-        this.hemi.intensity = p.hemiInt != null ? p.hemiInt : 0.24;
+        this.hemi.intensity = p.hemiInt != null ? p.hemiInt : 0.16;
+        this.key.intensity = p.keyInt != null ? p.keyInt : 0.88;
         this.key.color.set(p.dir || '#fff2ce');
+        this.rim.intensity = p.rimInt != null ? p.rimInt : 0.40;
         this.rim.color.set(p.rim || '#9fc6ff');
 
         if (this.skyMat) {

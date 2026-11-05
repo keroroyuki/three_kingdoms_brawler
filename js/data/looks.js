@@ -119,6 +119,7 @@ const LOOKS = {
         pants: '#5D4037', boot: '#3E2723',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        pauldron: '#5D4037', pauldronDark: '#4E342E',
         face: { shape: 'square', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.44 },
         weapon: 'dao', steel: '#C7CCD1', eyeColor: '#2A1710',
         stats: { hp: 40, atk: 9, spd: 62, reach: 1.0 }
@@ -133,6 +134,7 @@ const LOOKS = {
         pants: '#5D4037', boot: '#3E2723',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        quiver: '#5D4037',
         face: { shape: 'oval', brow: 'sharp', eye: 'sharp', ears: 'normal', jaw: 0.30 },
         weapon: 'bow', wood: '#6D4C33', eyeColor: '#2A1710',
         stats: { hp: 32, atk: 11, spd: 70, reach: 0 }
@@ -161,6 +163,7 @@ const LOOKS = {
         pants: '#4E342E', boot: '#3E2723',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'short',
+        pauldron: '#4E342E', pauldronDark: '#3E2723', backFlag: '#B3352B',
         weapon: 'lance', steel: '#C7CCD1', tassel: '#FDD835', wood: '#5D4037',
         face: { shape: 'long', brow: 'bushy', eye: 'normal', ears: 'normal', jaw: 0.32 },
         eyeColor: '#2A1710',
@@ -176,6 +179,7 @@ const LOOKS = {
         pants: '#4527A0', boot: '#311B92',
         head: 'band', hair: '#2B1B12', bandColor: '#FDD835',
         robeStyle: 'long',
+        collar: '#311B92',
         face: { shape: 'long', brow: 'refined', eye: 'calm', ears: 'normal', jaw: 0.28 },
         weapon: 'staff', magic: '#FF7043', eyeColor: '#2A1710',
         stats: { hp: 38, atk: 13, spd: 58, reach: 0 }
@@ -208,6 +212,7 @@ const LOOKS = {
         pants: '#263238', boot: '#1B2429',
         head: 'helm', hair: '#2B1B12', bandColor: '#FDD835', plume: '#FDD835',
         robeStyle: 'short',
+        pauldron: '#37474F', spike: '#C9A227',
         face: { shape: 'long', brow: 'bushy', eye: 'sharp', ears: 'normal', jaw: 0.36 },
         weapon: 'dao', steel: '#D6DBE0', eyeColor: '#2A1710',
         stats: { hp: 78, atk: 16, spd: 78, reach: 1.1 }
@@ -223,6 +228,7 @@ const LOOKS = {
         pants: '#263238', boot: '#1B2429',
         head: 'helm', hair: '#2B1B12', plume: '#B71C1C',
         robeStyle: 'short',
+        pauldron: '#90A4AE', spike: '#B71C1C', backFlag: '#B71C1C',
         weapon: 'axe', steel: '#D6DBE0',
         face: { shape: 'square', brow: 'bushy', eye: 'round', ears: 'normal', jaw: 0.48 },
         eyeColor: '#2A1710',

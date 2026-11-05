@@ -112,7 +112,10 @@ const World = (function () {
     }
 
     let GLOW_TEX = null;
-    const glowTex = () => (GLOW_TEX || (GLOW_TEX = glowTexture()));
+    const glowTex = () => {
+        if (!GLOW_TEX) { GLOW_TEX = glowTexture(); GLOW_TEX.__shared = true; }
+        return GLOW_TEX;
+    };
 
     /* ============================================================
      * 合批器
@@ -135,6 +138,31 @@ const World = (function () {
             }
             this.map.clear();
         }
+    }
+
+    /**
+     * 给平面按局部 y 刷一层顶点色：近处（局部 -y）亮、远处（局部 +y）暗。
+     * 平面绕 X 转 -90° 后局部 +y 正好指向世界 -z，所以这就是"离镜头越远越暗"。
+     * 没有这层渐变时，整块地面是同一个亮度，画面上 2/3 的面积糊成一片。
+     */
+    function shadeByDepth(geo, nearHex, farHex) {
+        const pos = geo.attributes.position;
+        let yMin = 1e9, yMax = -1e9;
+        for (let i = 0; i < pos.count; i++) {
+            const y = pos.getY(i);
+            if (y < yMin) yMin = y;
+            if (y > yMax) yMax = y;
+        }
+        const span = Math.max(0.001, yMax - yMin);
+        const cN = TK.col(nearHex), cF = TK.col(farHex), c = new THREE.Color();
+        const col = new Float32Array(pos.count * 3);
+        for (let i = 0; i < pos.count; i++) {
+            const k = (pos.getY(i) - yMin) / span;      // 0 = 近，1 = 远
+            c.copy(cN).lerp(cF, k * k);                 // 近处保留原色，远处加速压暗
+            col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        return geo;
     }
 
     /* ---------------- 基础零件 ---------------- */
@@ -183,10 +211,13 @@ const World = (function () {
 
     function grassTuft(x, z, s, hex, hex2) {
         const out = [];
-        for (let i = 0; i < 4; i++) {
-            const a = -0.5 + i * 0.32;
-            out.push(b.cone(0.045 * s, (0.42 + (i % 2) * 0.2) * s, i % 2 ? hex : hex2,
-                x + Math.sin(a) * 0.10 * s, 0.21 * s, z + Math.cos(a) * 0.08 * s, 0.16, 0, a, 4));
+        // 细长叶片：原来的四棱锥在远景下会被读成一顶顶小帐篷，改成薄板拼簇
+        for (let i = 0; i < 6; i++) {
+            const a = -0.8 + i * 0.32;
+            const h = (0.34 + U.hash(x * 3 + i) * 0.30 + U.hash(z + i) * 0.16) * s;
+            out.push(b.box(0.034 * s, h, 0.060 * s, i % 2 ? hex : hex2,
+                x + Math.sin(a) * 0.13 * s, h * 0.5, z + Math.cos(a) * 0.10 * s,
+                0, a * 0.35, a * 0.55));
         }
         return out;
     }
@@ -264,14 +295,14 @@ const World = (function () {
         const g = new THREE.Group();
         const parts = [
             b.cyl(0.06, 0.08, 1.5, pal.wood, 0, 0.75, 0, 0, 0, 0.04, 6),
-            b.cyl(0.16, 0.10, 0.26, '#3E2A22', 0, 1.55, 0, 0, 0, 0, 8)
+            b.cyl(0.13, 0.085, 0.22, '#3E2A22', 0, 1.55, 0, 0, 0, 0, 8)
         ];
         G.part(g, G.merge(parts), null);
         const flame = new THREE.Sprite(new THREE.SpriteMaterial({
             map: glowTex(), color: new THREE.Color(pal.lantern), blending: THREE.AdditiveBlending,
-            transparent: true, depthWrite: false, opacity: 0.95
+            transparent: true, depthWrite: false, opacity: 0.85
         }));
-        flame.scale.setScalar(1.5);
+        flame.scale.setScalar(1.05);
         flame.position.set(0, 1.78, 0);
         g.add(flame);
         g.position.set(x, 0, z);
@@ -321,7 +352,7 @@ const World = (function () {
             for (const g of h.glow) glow.add(g, x);
         }
         // 桃林
-        for (let i = 0; i < 26; i++) {
+        for (let i = 0; i < 34; i++) {
             const x = U.rand(-6, L + 12);
             const z = -6 - U.rand(0, 9);
             const s = U.rand(0.9, 1.5);
@@ -332,21 +363,22 @@ const World = (function () {
             const x = 4 + i * 11;
             for (const g of fence(x, -3.2, 6, pal)) solid.add(g, x);
         }
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < 110; i++) {
             const x = U.rand(0, L);
-            const z = U.rand(-2.2, 0.4);
+            const z = U.rand(-2.4, 0.6);
             for (const g of grassTuft(x, z, U.rand(0.9, 1.4), pal.groundAlt, pal.leaf)) solid.add(g, x);
         }
-        for (let i = 0; i < 26; i++) {
+        for (let i = 0; i < 46; i++) {
             const x = U.rand(0, L);
             const z = U.rand(-5, -1);
             for (const g of rock(x, z, U.rand(0.5, 1.1), pal.rock, U.shade(pal.rock, -0.12))) solid.add(g, x);
         }
-        // 战场前景草从（遮挡画面下缘，增加纵深）
-        for (let i = 0; i < 60; i++) {
+        // 战场前景草带：压住画面下缘，制造纵深。
+        // 原来只有 60 丛、且高到 1.6m，散落时会被读成一顶顶黑色小帐篷。
+        for (let i = 0; i < 260; i++) {
             const x = U.rand(-10, L + 10);
-            const s = U.rand(1.6, 2.6);
-            for (const g of grassTuft(x, 5.4, s, '#3E5A2A', '#4E6A32')) solid.add(g, x);
+            const s = U.rand(0.8, 1.5);
+            for (const g of grassTuft(x, U.rand(4.9, 6.4), s, '#46632C', '#557236')) solid.add(g, x);
         }
 
         solid.flush(root, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TK.gradient }));
@@ -361,7 +393,9 @@ const World = (function () {
         }
         for (let i = 0; i < 7; i++) {
             const x = 6 + i * 17;
-            const t = torch(x, 3.9, pal);
+            // 火把原来立在 z=3.9（战斗带之前），1.5m 高的杆子会挡住角色；
+            // 挪到战斗带后方，只作为背景光源。
+            const t = torch(x, -1.9, pal);
             root.add(t);
             anim.push(t);
         }
@@ -407,14 +441,14 @@ const World = (function () {
             solid.add(b.box(w, 0.12, 0.12, '#2E2018', x, 0.55, z, 0, 0, U.rand(-0.2, 0.2)), x);
             solid.add(b.box(w, 0.10, 0.10, '#2E2018', x, 0.25, z, 0, 0, U.rand(-0.2, 0.2)), x);
         }
-        for (let i = 0; i < 34; i++) {
+        for (let i = 0; i < 60; i++) {
             const x = U.rand(0, L);
             const z = U.rand(-4, 0.3);
             for (const g of rock(x, z, U.rand(0.4, 1.0), '#3A3230', '#2A2422')) solid.add(g, x);
         }
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 150; i++) {
             const x = U.rand(-8, L + 8);
-            for (const g of grassTuft(x, 5.2, U.rand(1.4, 2.4), '#33291E', '#3E3224')) solid.add(g, x);
+            for (const g of grassTuft(x, U.rand(5.0, 6.4), U.rand(0.9, 1.7), '#3B3026', '#493B28')) solid.add(g, x);
         }
 
         solid.flush(root, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TK.gradient }));
@@ -487,9 +521,9 @@ const World = (function () {
             const x = U.rand(0, L);
             for (const g of rock(x, U.rand(-2, 0.2), U.rand(0.4, 0.8), pal.rock, U.shade(pal.rock, -0.1))) solid.add(g, x);
         }
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < 110; i++) {
             const x = U.rand(-8, L + 8);
-            for (const g of grassTuft(x, 5.2, U.rand(1.2, 2.0), '#1E2A24', '#28352C')) solid.add(g, x);
+            for (const g of grassTuft(x, U.rand(5.0, 6.2), U.rand(0.9, 1.7), '#26332B', '#30402F')) solid.add(g, x);
         }
 
         solid.flush(root, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TK.gradient }));
@@ -500,6 +534,28 @@ const World = (function () {
             const ln = lantern(x, 3.7, -8.0, pal);
             root.add(ln); anim.push(ln);
         }
+    }
+
+    /**
+     * 远景：两层山脊剪影。原有关卡只有 z=-52 的 7 个锥体，
+     * 在那个距离上雾已经吃掉 75% 的颜色，等于没有背景。
+     */
+    function farLayers(root, pal, L) {
+        const solid = new Batch();
+        for (let k = 0; k < 2; k++) {
+            // 这次的距离和高度是按"地平线上的山脊"算的：
+            // 放到 -29 会变成顶住画面上缘的巨型三角，反而压住天空
+            const z = k === 0 ? -38 : -50;
+            const h = k === 0 ? 3.8 : 5.4;
+            const col = k === 0 ? U.shade(pal.fog, -0.16) : U.shade(pal.fog, -0.04);
+            const n = 10;
+            for (let i = 0; i < n; i++) {
+                const x = -20 + i * (L + 40) / (n - 1);
+                const hh = h * (0.62 + U.hash(i + k * 13) * 0.66);
+                solid.add(b.cone(7.4, hh, col, x, 0, z, 0, U.hash(i * 3 + k) * 0.7, 0, 8), x);
+            }
+        }
+        solid.flush(root, new THREE.MeshBasicMaterial({ vertexColors: true }));
     }
 
     /* ============================================================
@@ -519,8 +575,16 @@ const World = (function () {
             /* ---- 地面 ---- */
             const gTex = noiseTexture(this.pal.ground, this.pal.groundAlt, { grass: true });
             gTex.repeat.set(L / 4, 8);
-            this.groundMat = new THREE.MeshToonMaterial({ map: gTex, gradientMap: TK.gradient });
-            const ground = new THREE.Mesh(new THREE.PlaneGeometry(L + 80, 34), this.groundMat);
+            // 远处向雾色靠拢并压暗：空气透视 + 地平线层次，近处保持原色
+            const fogC = TK.col(this.pal.fog);
+            const farTint = new THREE.Color(0xffffff).lerp(fogC, 0.42).multiplyScalar(0.86);
+            this.groundMat = new THREE.MeshToonMaterial({
+                map: gTex, gradientMap: TK.gradient, vertexColors: true
+            });
+            const ground = new THREE.Mesh(
+                shadeByDepth(new THREE.PlaneGeometry(L + 80, 34, 1, 8), '#FFFFFF', farTint),
+                this.groundMat
+            );
             ground.rotation.x = -Math.PI / 2;
             ground.position.set(L / 2, -0.02, -9);
             this.root.add(ground);
@@ -529,18 +593,30 @@ const World = (function () {
             const pTex = pathTexture(this.pal.path, this.pal.pathAlt);
             pTex.repeat.set(L / 6, 1);
             this.pathMat = new THREE.MeshToonMaterial({
-                map: pTex, gradientMap: TK.gradient, transparent: true, depthWrite: false
+                map: pTex, gradientMap: TK.gradient, transparent: true, depthWrite: false,
+                vertexColors: true
             });
-            const path = new THREE.Mesh(new THREE.PlaneGeometry(L + 40, GROUND.zMax + 1.2), this.pathMat);
+            // 战斗带整体压暗一档，角色（尤其黄巾兵的土黄甲）才不会和路面糊在一起
+            const pathFar = new THREE.Color(0xffffff).lerp(fogC, 0.30).multiplyScalar(0.80);
+            const path = new THREE.Mesh(
+                shadeByDepth(new THREE.PlaneGeometry(L + 40, GROUND.zMax + 1.2, 1, 4), '#F2ECE0', pathFar),
+                this.pathMat
+            );
             path.rotation.x = -Math.PI / 2;
             path.position.set(L / 2, 0.015, (GROUND.zMax + 1.2) / 2 - 0.6);
             path.renderOrder = 1;
             this.root.add(path);
 
             /* ---- 主题布景 ---- */
-            if (this.theme === 'fire') buildFire(this.root, level, this.pal, this.anim);
-            else if (this.theme === 'palace') buildPalace(this.root, level, this.pal, this.anim);
-            else buildPlains(this.root, level, this.pal, this.anim);
+            if (this.theme === 'palace') {
+                buildPalace(this.root, level, this.pal, this.anim);
+            } else if (this.theme === 'fire') {
+                farLayers(this.root, this.pal, L);
+                buildFire(this.root, level, this.pal, this.anim);
+            } else {
+                farLayers(this.root, this.pal, L);
+                buildPlains(this.root, level, this.pal, this.anim);
+            }
 
             /* ---- 飘浮尘埃 ---- */
             this._buildMotes();

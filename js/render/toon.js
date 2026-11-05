@@ -13,22 +13,25 @@ TK.col = function (hex) { return new THREE.Color(hex); };
 
 /* ---------------- 三阶色阶贴图 ---------------- */
 (function buildGradient() {
-    const v = new Uint8Array([96, 158, 214, 246, 255]);
+    // 暗部压到 56/255：原来 96 起跳，背光面永远不暗，模型看起来像平面贴纸
+    const v = new Uint8Array([56, 118, 196, 244, 255]);
     const t = new THREE.DataTexture(v, v.length, 1, THREE.RedFormat);
     t.minFilter = THREE.NearestFilter;
     t.magFilter = THREE.NearestFilter;
     t.generateMipmaps = false;
     t.needsUpdate = true;
     TK.gradient = t;
+    t.__shared = true;   // 模块级共享贴图，切关/销毁场景时不能 dispose
 
     // 金属用的更硬朗的三阶（暗部更深、高光更亮）
-    const v2 = new Uint8Array([70, 150, 235, 255]);
+    const v2 = new Uint8Array([44, 118, 208, 255]);
     const t2 = new THREE.DataTexture(v2, v2.length, 1, THREE.RedFormat);
     t2.minFilter = THREE.NearestFilter;
     t2.magFilter = THREE.NearestFilter;
     t2.generateMipmaps = false;
     t2.needsUpdate = true;
     TK.gradientMetal = t2;
+    t2.__shared = true;
 })();
 
 /* ---------------- 材质 ---------------- */
@@ -37,6 +40,7 @@ const TOON_BASE = new THREE.MeshToonMaterial({
     gradientMap: TK.gradient,
     color: 0xffffff
 });
+TOON_BASE.__shared = true;
 
 const OUTLINE_MAT = new THREE.ShaderMaterial({
     uniforms: {
@@ -56,6 +60,7 @@ const OUTLINE_MAT = new THREE.ShaderMaterial({
     ].join('\n'),
     side: THREE.BackSide
 });
+OUTLINE_MAT.__shared = true;
 
 TK.mat = {
     /** 每个角色独立一份，便于受击闪白 */
@@ -253,6 +258,7 @@ TK.glowTex = function () {
     const t = new THREE.CanvasTexture(c);
     t.encoding = THREE.sRGBEncoding;
     t.colorSpace = THREE.SRGBColorSpace;
+    t.__shared = true;
     _GLOW = t;
     return t;
 };

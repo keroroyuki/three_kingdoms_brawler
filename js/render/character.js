@@ -41,6 +41,7 @@ const Chibi = (function () {
         SHADOW_TEX = new THREE.CanvasTexture(c);
         SHADOW_TEX.encoding = THREE.sRGBEncoding;
     SHADOW_TEX.colorSpace = THREE.SRGBColorSpace;
+        SHADOW_TEX.__shared = true;
         return SHADOW_TEX;
     }
 
@@ -335,6 +336,83 @@ const Chibi = (function () {
         } else {
             // 布衣：肩线
             parts.push(G.at(G.torus(0.20 * W, 0.020, light, Math.PI * 2), 0, 0.27, 0, Math.PI / 2, 0, 0));
+        }
+
+        /* ---- 衣纹 / 甲片 ----
+         * 合批管线只保留 position / normal / color，没有 uv，贴图套不上这套模型，
+         * 所以"纹理"只能用极薄的暗色几何 + 明暗对比来做，靠数量少、对比低来出细节。 */
+        const hemD = U.shade(hem, -0.16);
+        if (look.armor) {
+            const ar = look.armor;
+            const al = look.armorLight || U.shade(ar, 0.2);
+            const ap = U.shade(ar, -0.18);
+            // 护心镜：胸前正面（角色朝 +X）一枚圆镜，正好压住布甲交界
+            parts.push(G.at(G.cyl(0.056, 0.056, 0.034, look.trim || '#C9A227', 10), 0.268 * W, 0.12, 0, 0, 0, Math.PI / 2));
+            parts.push(G.at(G.sphere(0.026, al, 8, 6, 0.7, 1, 1), 0.288 * W, 0.12, 0));
+            // 甲片：两排错位小片，撑出层叠感（远看是暗纹，近看才是甲片）
+            for (let row = 0; row < 2; row++) {
+                for (let i = -1; i <= 1; i++) {
+                    parts.push(G.at(
+                        G.box(0.030, 0.050, 0.084 * W, row % 2 ? ar : ap),
+                        0.212 + row * 0.008, -0.150 - row * 0.064, i * 0.105 * W
+                    ));
+                }
+            }
+            // 铆钉：胸口四角，把"一整块板"打散
+            for (const sy of [0.02, 0.20]) {
+                for (const sz of [-0.09, 0.09]) {
+                    parts.push(G.at(G.sphere(0.016, al, 6, 5), 0.262, sy, sz * W));
+                }
+            }
+        } else {
+            // 布衣：裙摆竖向折痕（贴着前侧弧面），越靠中间越靠前
+            const hh = long ? 0.34 : 0.20;
+            const fy = hemY + hh / 2 + 0.02;
+            for (const [pz, px] of [[0, 0.328], [0.10, 0.302], [-0.10, 0.302], [0.18, 0.248], [-0.18, 0.248]]) {
+                parts.push(G.at(G.box(0.016, hh, 0.020, hemD), px * W, fy, pz * W));
+            }
+            // 下摆磨损：两块深浅不一的不规则暗斑，不做对称的"补丁贴纸"
+            parts.push(G.at(G.box(0.022, 0.075, 0.10, U.shade(hem, -0.24)), 0.300 * W, hemY + 0.10, -0.085 * W, 0, 0.12, 0));
+            parts.push(G.at(G.box(0.020, 0.052, 0.072, U.shade(hem, -0.20)), 0.292 * W, hemY + 0.22, 0.060 * W, 0, -0.10, 0));
+        }
+
+        /* ---- 兵种剪影配件 ----
+         * 八个兵种原来共用同一具身体，混战时只能靠兵器猜身份。
+         * 这里用"肩宽 / 背部挂件 / 立领"三组廉价几何把轮廓拉开。 */
+        if (look.pauldron) {
+            const pc = look.pauldron, pe = look.pauldronDark || U.shade(pc, -0.24);
+            for (const s of [-1, 1]) {
+                // 外扩披膊：把肩线整体撑宽半个头
+                parts.push(G.at(G.box(0.19, 0.11, 0.24 * W, pc), -0.01, 0.30, s * 0.28 * W, 0, s * 0.16, 0));
+                parts.push(G.at(G.box(0.16, 0.21, 0.06 * W, pe), -0.02, 0.20, s * 0.37 * W, 0, s * 0.16, 0.16));
+                if (look.spike) {
+                    // 精锐的肩部尖甲
+                    parts.push(G.at(G.cone(0.045, 0.19, look.spike, 6), -0.02, 0.38, s * 0.34 * W, -s * 0.5, 0, 0));
+                }
+            }
+        }
+        if (look.collar) {
+            // 术士立领：从后颈竖起的高领，长袍兵种一眼可辨
+            for (const s of [-1, 1]) {
+                parts.push(G.at(G.box(0.09, 0.30, 0.14, look.collar), -0.17, 0.36, s * 0.15 * W, 0, 0, -0.18));
+            }
+        }
+        if (look.quiver) {
+            // 箭袋：挂在靠镜头一侧的腰后，箭羽从肩侧探出来才看得见
+            const q = look.quiver, qd = U.shade(q, -0.28);
+            parts.push(G.at(G.cyl(0.062, 0.075, 0.44, q, 10), -0.20, 0.14, 0.27 * W, 0, 0, -0.36));
+            parts.push(G.at(G.torus(0.072, 0.014, qd, Math.PI * 2), -0.28, 0.34, 0.27 * W, Math.PI / 2, 0, -0.36));
+            for (let i = -1; i <= 1; i++) {
+                parts.push(G.at(G.cyl(0.011, 0.011, 0.20, '#EFE3C4', 5), -0.30 + i * 0.012, 0.44, 0.29 * W + i * 0.045, 0, 0, -0.36));
+                parts.push(G.at(G.box(0.012, 0.07, 0.05, '#D8D2C0'), -0.31 + i * 0.012, 0.52, 0.29 * W + i * 0.045, 0, 0, -0.36));
+            }
+        }
+        if (look.backFlag) {
+            // 靠旗：两面立在肩后的小旗，长矛兵与铁甲精锐的标志
+            for (const s of [-1, 1]) {
+                parts.push(G.at(G.cyl(0.017, 0.017, 0.92, '#5A3A22', 6), -0.22, 0.60, s * 0.34 * W, 0, 0, 0.14));
+                parts.push(G.at(G.box(0.014, 0.30, 0.21, look.backFlag), -0.30, 0.86, s * 0.45 * W, 0, 0, 0.14));
+            }
         }
 
         // 披风：挂在肩后，面片法线朝镜头（+Z），下摆向后展开
@@ -1100,6 +1178,8 @@ const Chibi = (function () {
 
             this.pose = Object.assign({}, BASE);
             this.blinkT = U.rand(0, 3);
+            /** BOSS 战期间的压暗系数（0 正常，1 完全压暗），逐帧缓动 */
+            this.dimK = 0;
         }
 
         update(a, dt) {
@@ -1157,6 +1237,20 @@ const Chibi = (function () {
 
             // 受击闪白
             this.mat.emissive.setScalar(U.clamp(a.flash, 0, 1) * 0.85);
+
+            // BOSS 登场：杂兵整体收暗并偏冷，把视觉焦点留给敌将。
+            // toon 材质没做真去色，这里用乘色实现"退后一层"的效果，
+            // 缓动而不是瞬切，避免 BOSS 一出场全场闪一下。
+            const wantDim = a.dimmed ? 1 : 0;
+            this.dimK += (wantDim - this.dimK) * Math.min(1, dt * 5);
+            if (this.dimK > 0.02) {
+                const d = this.dimK;
+                // 注意：材质色是按线性空间相乘的，最后还要过 sRGB 输出编码，
+                // 所以这里的系数要比"想要的观感暗度"更低才看得出差别。
+                this.mat.color.setRGB(1 - 0.62 * d, 1 - 0.65 * d, 1 - 0.54 * d);
+            } else if (this.mat.color.r !== 1) {
+                this.mat.color.setRGB(1, 1, 1);
+            }
             const fade = a.fade == null ? 1 : a.fade;
             if (fade < 1) {
                 this.mat.transparent = true;
@@ -1167,8 +1261,10 @@ const Chibi = (function () {
             }
 
             // 无敌闪烁
+            // hideRig 由 Game 在结算面板出现时设置；这里每帧都会重算 visible，
+            // 所以必须让开关参与运算，否则外部写 root.visible 会被下一帧覆盖。
             const blink = a.invuln > 0 && !a.dead && a.state !== 'skill';
-            this.root.visible = !(blink && Math.floor(a.time * 22) % 2 === 0);
+            this.root.visible = !a.hideRig && !(blink && Math.floor(a.time * 22) % 2 === 0);
 
             // 影子
             const hk = U.clamp(a.y / 2.6, 0, 1);
@@ -1176,7 +1272,7 @@ const Chibi = (function () {
             this.shadow.position.set(a.x, 0.012, a.z);
             this.shadow.scale.set(1.05 * sc, 0.62 * sc, 1);
             this.shadow.material.opacity = 0.62 * (1 - hk * 0.7) * fade;
-            this.shadow.visible = !a.remove && fade > 0.02;
+            this.shadow.visible = !a.remove && !a.hideRig && fade > 0.02;
 
             // 坐骑摆腿
             if (this.mountLegs) {

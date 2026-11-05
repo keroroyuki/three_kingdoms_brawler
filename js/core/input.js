@@ -32,6 +32,17 @@ const KEY_MAP = {
     'Escape': 'pause', 'KeyP': 'pause'
 };
 
+/**
+ * 标准手柄映射（Xbox 布局；PS 手柄的键位编号一致）。
+ * 左摇杆 / 十字键移动，A 攻击、B 跳跃、X 必杀、RB 冲刺、LT 防御。
+ */
+const PAD_BUTTON = {
+    0: 'attack', 1: 'jump', 2: 'skill', 5: 'dash',
+    6: 'guard', 8: 'pause', 9: 'start',
+    12: 'up', 13: 'down', 14: 'left', 15: 'right'
+};
+const PAD_DEAD = 0.42;
+
 class InputManager {
     constructor() {
         /** 当前按住 */
@@ -47,6 +58,8 @@ class InputManager {
         this.lastTapDir = Object.create(null);
         /** 双击方向（单独存放，避免被 buffer 倒计时污染） */
         this.dashDir = 1;
+        /** 手柄上一帧的按键状态，用于边沿检测 */
+        this.padPrev = Object.create(null);
         this.time = 0;
         this.enabled = true;
         this._bind();
@@ -104,6 +117,47 @@ class InputManager {
     injectDown(action) { if (!this.held[action]) this._press(action); }
     injectUp(action) { if (this.held[action]) { this.held[action] = false; this.released[action] = true; } }
 
+    /**
+     * 手柄轮询：浏览器不提供事件，只能在每帧主动读取。
+     * 摇杆与十字键合并成同一组方向动作，边沿检测后再走 injectDown，
+     * 这样双击冲刺、输入缓冲、菜单导航都能复用键盘那一套逻辑。
+     */
+    _pollPad() {
+        if (!this.enabled || !navigator.getGamepads) return;
+        let pad = null;
+        try {
+            const list = navigator.getGamepads() || [];
+            for (let i = 0; i < list.length; i++) {
+                if (list[i] && list[i].connected) { pad = list[i]; break; }
+            }
+        } catch (e) {
+            return;
+        }
+        // 拔掉手柄时要把按住的键放掉，否则角色会一直朝一个方向走
+        if (!pad) {
+            for (const k in this.padPrev) if (this.padPrev[k]) this.injectUp(k);
+            this.padPrev = Object.create(null);
+            return;
+        }
+
+        const now = Object.create(null);
+        for (const i in PAD_BUTTON) {
+            const b = pad.buttons[+i];
+            now[PAD_BUTTON[i]] = !!(b && (b.pressed || b.value > 0.5));
+        }
+        const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0;
+        if (ax < -PAD_DEAD) now.left = true;
+        if (ax > PAD_DEAD) now.right = true;
+        if (ay < -PAD_DEAD) now.up = true;
+        if (ay > PAD_DEAD) now.down = true;
+
+        for (const k in now) {
+            if (now[k] && !this.padPrev[k]) this.injectDown(k);
+            else if (!now[k] && this.padPrev[k]) this.injectUp(k);
+        }
+        this.padPrev = now;
+    }
+
     isDown(a) { return !!this.held[a]; }
     justPressed(a) { return !!this.pressed[a]; }
 
@@ -127,6 +181,7 @@ class InputManager {
     }
 
     update(dt) {
+        this._pollPad();
         this.time += dt;
         for (const k in this.buffer) {
             if (this.buffer[k] > 0) this.buffer[k] -= dt;

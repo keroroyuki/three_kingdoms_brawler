@@ -51,7 +51,9 @@ const HERO_KIT = {
 
 /** 跳跃 / 冲刺 / 反击 通用招式 */
 const COMMON_MOVES = {
-    air: { anim: 'air', dur: 0.36, hitAt: 0.15, dmgMul: 1.10, reachMul: 1.00, kb: 1.4, sound: 'swing' },
+    // 跳斩从起跳到下落全程都可能命中地面目标：只给垂直判定 ±1.1 的话，
+    // 在跳跃顶点按攻击会因为落点高度差太大而直接空挥。
+    air: { anim: 'air', dur: 0.36, hitAt: 0.15, dmgMul: 1.10, reachMul: 1.00, kb: 1.4, sound: 'swing', yLo: -2.15, yHi: 0.95 },
     dash: { anim: 'dashAtk', dur: 0.48, hitAt: 0.13, dmgMul: 1.50, reachMul: 1.28, kb: 3.0, heavy: true, sound: 'swingHeavy' },
     counter: { anim: 'counter', dur: 0.40, hitAt: 0.10, dmgMul: 1.55, reachMul: 1.10, kb: 2.6, heavy: true, sound: 'swingHeavy' }
 };
@@ -63,7 +65,7 @@ const SKILL_DEFS = {
     spin: {
         superName: '双股剑 · 乾坤乱舞',
         anim: 'spin',
-        dur: 1.30, invulnFrom: 0.06, invulnTo: 1.18, cost: 100,
+        dur: 1.30, invulnFrom: 0.06, invulnTo: 1.18, cost: 50,
         move: [{ at: 0.05, vx: 1.6, dur: 0.9 }],
         hits: [
             { at: 0.14, dmgMul: 0.85, reachMul: 1.25, kb: 0.9, hue: '#BFE9FF' },
@@ -79,7 +81,7 @@ const SKILL_DEFS = {
     sweep: {
         superName: '青龙偃月 · 拖刀断岳',
         anim: 'sweep',
-        dur: 1.15, invulnFrom: 0.10, invulnTo: 1.00, cost: 100,
+        dur: 1.15, invulnFrom: 0.10, invulnTo: 1.00, cost: 50,
         move: [{ at: 0.26, vx: 5.2, dur: 0.42 }],
         hits: [
             { at: 0.30, dmgMul: 2.60, reachMul: 2.05, kb: 5.0, kbUp: 2.6, heavy: true, launch: true, multi: true, depthTol: 0.95, hue: '#FFD166' }
@@ -94,7 +96,7 @@ const SKILL_DEFS = {
     thrust: {
         superName: '龙胆 · 七进七出',
         anim: 'thrustSpecial',
-        dur: 0.95, invulnFrom: 0.05, invulnTo: 0.80, cost: 100,
+        dur: 0.95, invulnFrom: 0.05, invulnTo: 0.80, cost: 50,
         move: [{ at: 0.16, vx: 15.0, dur: 0.34 }],
         hits: [
             { at: 0.18, dmgMul: 1.05, reachMul: 1.5, kb: 0.6, multi: true, hue: '#BFE9FF', sound: 'hit' },
@@ -107,7 +109,7 @@ const SKILL_DEFS = {
     roar: {
         superName: '当阳桥 · 万人敌',
         anim: 'roar',
-        dur: 1.20, invulnFrom: 0.05, invulnTo: 1.05, cost: 100,
+        dur: 1.20, invulnFrom: 0.05, invulnTo: 1.05, cost: 50,
         hits: [
             { at: 0.36, radius: 3.6, radiusZ: 1.5, dmgMul: 1.85, kb: 5.2, kbUp: 2.4, heavy: true, launch: true, hue: '#FF8A3C' }
         ],
@@ -121,7 +123,7 @@ const SKILL_DEFS = {
     meteor: {
         superName: '八阵图 · 天雷地火',
         anim: 'cast',
-        dur: 1.45, invulnFrom: 0.05, invulnTo: 1.35, cost: 100,
+        dur: 1.45, invulnFrom: 0.05, invulnTo: 1.35, cost: 50,
         hits: [],
         onStart: (p) => {
             p.game.audio.play('summon');
@@ -134,6 +136,7 @@ const SKILL_DEFS = {
             p.meteorTargets = list;
             list.forEach((e, i) => {
                 g.schedule(0.42 + i * 0.11, () => {
+                    if (p.dead) return;
                     const fx = g.fx;
                     fx.beam(e.x, e.z, '#BFE9FF', 0.4);
                     fx.fireBurst({ x: e.x, y: 0.2, z: e.z }, 16, 1.1);
@@ -251,8 +254,9 @@ class Player extends Actor {
         if (this.atkDef) {
             const d = this.atkDef;
             if (!this.atkHitDone && this.stateT >= d.hitAt) this.doHitCheck();
-            const winStart = d.hitAt + 0.02;
-            if (this.stateT >= winStart && this.stateT < d.dur && inp.consume('attack')) {
+            // 整个出招过程都接受预输入：原来的 buffered('attack') 只有 160ms，
+            // 在 hitAt 前狂按时会被输入缓冲丢掉，导致连段按键感很"吃帧"。
+            if (!this.comboQueued && this.stateT < d.dur && inp.consume('attack')) {
                 this.comboQueued = true;
             }
             if (this.stateT >= d.dur) {
@@ -273,6 +277,19 @@ class Player extends Actor {
         }
 
         if (this.state === 'land' && this.stateT < 0.13) return;
+
+        // 完美格挡后的反击优先于持续防御：否则玩家还按着空格时，
+        // 攻击键会被下面的 guard 分支吞掉，反击窗口形同虚设。
+        if (this.counterWindow > 0 && inp.consume('attack')) {
+            this.counterWindow = 0;
+            this.atkDef = COMMON_MOVES.counter;
+            this.stateT = 0; this.atkHitDone = false; this.hitList = new Set();
+            this.setState('_atk');
+            this.game.audio.play('swingHeavy');
+            g.fx.addFlash(0.22, '#BFE9FF');
+            this.faceNearest();
+            return;
+        }
 
         const ax = inp.axis();
 
@@ -383,8 +400,8 @@ class Player extends Actor {
 
     startSkill() {
         const tier = this.rage >= this.maxRage ? 1 : 0;
-        this.rage = 0;
         this.skillDef = SKILL_DEFS[this.kit.skill];
+        this.rage = tier === 1 ? 0 : Math.max(0, this.rage - (this.skillDef.cost || 50));
         this.skillTier = tier;
         this.skillFired = new Set();
         this.stateT = 0;
@@ -507,6 +524,21 @@ class Player extends Actor {
         this.invuln = 2.2;
         this.flash = 0;
         this.rage = Math.max(0, this.rage - 25);
+        // 死亡瞬间可能还在出招/释放技能，残留下来的招式数据会在复活后
+        // 立刻"续播"，导致刚站起来就自动挥刀。
+        this.atkDef = null;
+        this.skillDef = null;
+        this.skillFired = null;
+        this.hitList = new Set();
+        this.telegraph = 0;
+        this.stun = 0;
+        this.comboStep = 0;
+        this.comboQueued = false;
+        this.combo = 0;
+        this.comboT = 0;
+        this.counterWindow = 0;
+        this.airAttackUsed = false;
+        this.facing = 1;
         this.z = 2.0;
         this.x = Math.max(this.game.cam.x - 3.0, this.game.arena.min + 1);
         this.game.fx.addFlash(0.35, '#FFD166');

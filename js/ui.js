@@ -371,7 +371,7 @@ class UI {
         if (!p) return;
 
         /* ---- 左上：角色面板 ---- */
-        const px = 14, py = 12, pw = 268, ph = 74;
+        const px = 14, py = 12, pw = 268, ph = 88;
         ctx.save();
         U.roundRect(ctx, px, py, pw, ph, 8);
         ctx.fillStyle = C.panel; ctx.fill();
@@ -419,6 +419,7 @@ class UI {
         }
 
         // 命数
+        txt(ctx, '命', px + 202, py + 30, 10, C.dim, 'right', { weight: 500 });
         for (let i = 0; i < Math.max(0, p.lives - 1); i++) {
             const hx = px + 214 + i * 15, hy = py + 26;
             ctx.save();
@@ -742,7 +743,7 @@ class UI {
         }
 
         txt(ctx, '↑↓ 选择    Enter 确定', VIEW.W / 2, VIEW.H - 42, 14, C.dim, 'center', { weight: 500 });
-        txt(ctx, '键盘操作 · 无需安装 · 打开即玩    M 静音', VIEW.W / 2, VIEW.H - 20, 12, U.rgba(C.white, 0.35), 'center', { weight: 400 });
+        txt(ctx, '键盘 / 手柄均可 · 无需安装 · 打开即玩    M 静音', VIEW.W / 2, VIEW.H - 20, 12, U.rgba(C.white, 0.35), 'center', { weight: 400 });
         ctx.restore();
     }
 
@@ -760,9 +761,9 @@ class UI {
             ['J', '普通攻击（连按三连击）'],
             ['K', '跳跃（空中 J 可跳斩）'],
             ['Shift / 双击左右', '冲刺（冲刺中 J 为冲斩）'],
-            ['空格（按住）', '防御（受击瞬间按为完美格挡）'],
+            ['空格（按住）', '防御（12% 伤害，重击会破防）'],
             ['L / U', '必杀技（怒气 50 起，满 100 为超必杀）'],
-            ['Enter', '确认 / 暂停菜单'],
+            ['Enter', '确认 / 菜单操作'],
             ['Esc / P', '暂停（切走窗口会自动暂停）'],
             ['M', '静音开关']
         ];
@@ -777,8 +778,10 @@ class UI {
             y += 37;
         }
 
-        txt(ctx, '完美格挡：在敌人命中前一瞬按住防御，可完全免伤并让敌人失衡，', VIEW.W / 2, 470, 14, U.rgba(C.white, 0.78), 'center', { weight: 500 });
-        txt(ctx, '随后 0.5 秒内按 J 触发强力反击。', VIEW.W / 2, 492, 14, U.rgba(C.white, 0.78), 'center', { weight: 500 });
+        txt(ctx, '手柄：左摇杆 / 十字键移动　A 攻击　B 跳跃　X 必杀　RB 冲刺　LT 防御　Start 暂停',
+            VIEW.W / 2, 456, 13, U.rgba(C.white, 0.7), 'center', { weight: 500 });
+        txt(ctx, '完美格挡：在敌人命中前 0.17 秒内按下防御，可完全免伤并打断敌将出招，', VIEW.W / 2, 484, 14, U.rgba(C.white, 0.78), 'center', { weight: 500 });
+        txt(ctx, '随后 0.55 秒内按 J 触发强力反击。', VIEW.W / 2, 506, 14, U.rgba(C.white, 0.78), 'center', { weight: 500 });
 
         const a = 0.55 + Math.sin(this.t * 5) * 0.35;
         ctx.globalAlpha = a;
@@ -804,7 +807,23 @@ class UI {
         ctx.fillRect(0, 0, VIEW.W, VIEW.H);
 
         txt(ctx, '择 一 明 主', VIEW.W / 2, 56, 30, C.gold, 'center', { stroke: C.ink, strokeW: 6 });
-        txt(ctx, '← → 选择    Enter 出征    Esc 返回', VIEW.W / 2, 80, 13, C.dim, 'center', { weight: 500 });
+        txt(ctx, '← → 选择武将    ↑ ↓ 切换难度    Enter 出征    Esc 返回', VIEW.W / 2, 80, 13, C.dim, 'center', { weight: 500 });
+
+        // 难度三签：放在左上角，与中央的武将与底部的详情面板都不冲突
+        txt(ctx, '难度', 33, 46, 13, U.rgba(C.white, 0.55), 'left', { weight: 600 });
+        for (let i = 0; i < DIFFICULTY.length; i++) {
+            const dw = 58, dh = 24, bx = 70 + i * (dw + 6), by = 28;
+            const on = i === g.diffIndex;
+            U.roundRect(ctx, bx, by, dw, dh, 5);
+            ctx.fillStyle = on ? U.rgba(C.gold, 0.88) : 'rgba(18,13,10,0.66)';
+            ctx.fill();
+            ctx.lineWidth = 1.2;
+            ctx.strokeStyle = on ? '#FFE9A8' : U.rgba(C.gold, 0.32);
+            ctx.stroke();
+            txt(ctx, DIFFICULTY[i].name, bx + dw / 2, by + 17, on ? 14 : 13,
+                on ? '#2A1A08' : U.rgba(C.white, 0.62), 'center',
+                { weight: on ? 700 : 500, shadow: false });
+        }
 
         const keys = Object.keys(HERO_KIT);
         const idx = g.selectIndex;
@@ -875,6 +894,7 @@ class UI {
         txt(ctx, '「' + look.title + '」', pxx + 130, pyy + 33, 14, C.dim, 'left', { weight: 500 });
         txt(ctx, look.desc, pxx + 22, pyy + 58, 14, U.rgba(C.white, 0.85), 'left', { weight: 500 });
         txt(ctx, '必杀：' + kit.skillName, pxx + 22, pyy + 80, 14, '#FFE9A8', 'left', { weight: 600 });
+        txt(ctx, '难度 · ' + g.diff.name + '　' + g.diff.sub, pxx + 22, pyy + 102, 13, U.rgba(C.white, 0.62), 'left', { weight: 500 });
 
         // 四维
         const bars = [
@@ -904,6 +924,7 @@ class UI {
         const L = g.level;
         txt(ctx, L.name, VIEW.W / 2, 250, 40, C.gold, 'center', { stroke: C.ink, strokeW: 8 });
         txt(ctx, L.sub, VIEW.W / 2, 292, 18, U.rgba(C.white, 0.86), 'center', { weight: 500 });
+        txt(ctx, '难度 · ' + g.diff.name, VIEW.W / 2, 320, 14, U.rgba(C.gold, 0.72), 'center', { weight: 600 });
         ctx.strokeStyle = U.rgba(C.gold, 0.7); ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(VIEW.W / 2 - 150, 268); ctx.lineTo(VIEW.W / 2 - 16, 268);

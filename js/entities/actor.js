@@ -303,36 +303,60 @@ class Actor {
      * ========================================================== */
     takeHit(h) {
         if (this.dead || this.invuln > 0) return false;
+        // 径向伤害（陨石/雷火）在目标与落点重合时 dir 会算出 0，
+        // 直接用于 facing = -dir 会让角色朝向变成 0、后续攻击判定失效。
+        if (!h.dir) {
+            const sx = h.srcX != null ? h.srcX : (h.src ? h.src.x : this.x);
+            h.dir = this.x >= sx ? 1 : -1;
+        }
 
         const g = this.game;
         const fx = g.fx;
         const pos = this.chest();
+        // 每次结算前先清空：否则上一次完美格挡的标记会残留，
+        // 之后任何一次普通受击都会被误记成完美格挡。
+        this.lastBlockPerfect = false;
 
         /* ---- 格挡判定 ---- */
         if (this.state === 'guard' && h.dir * this.facing < 0) {
             const perfect = this.stateT < 0.17;
+            // 重击可以破防：按住防御硬吃所有攻击会让「龟缩」成为最优解
+            const guardBreak = !perfect && !!h.heavy;
             this.lastBlockPerfect = perfect;
-            const dmg = perfect ? 0 : Math.max(1, Math.round(h.dmg * 0.12));
+            const dmg = perfect ? 0 : Math.max(1, Math.round(h.dmg * (guardBreak ? 0.28 : 0.12)));
             this.hp -= dmg;
-            this.vx = h.dir * (perfect ? 0.35 : 1.5);
-            this.stun = perfect ? 0 : 0.14;
+            this.vx = h.dir * (perfect ? 0.35 : (guardBreak ? 2.4 : 1.5));
+            this.stun = perfect ? 0 : (guardBreak ? 0.42 : 0.14);
+            if (guardBreak) this.forceState('stagger');
             fx.slash({ x: pos.x + this.facing * 0.35, y: pos.y, z: pos.z }, 0.9, this.facing, 'h',
-                perfect ? '#BFE9FF' : '#FFD166');
-            fx.hitSpark(pos, -h.dir, perfect ? 1.5 : 0.7);
+                perfect ? '#BFE9FF' : (guardBreak ? '#FF7A4C' : '#FFD166'));
+            fx.hitSpark(pos, -h.dir, perfect ? 1.5 : (guardBreak ? 1.2 : 0.7));
             g.audio.play(perfect ? 'perfectGuard' : 'guard');
             if (perfect) {
                 fx.stop(0.14);
                 fx.addFlash(0.34, '#BFE9FF');
                 fx.text({ x: pos.x, y: pos.y + 0.5, z: pos.z }, '完美格挡！', '#BFE9FF', 20);
-                if (h.src && h.src.alive) { h.src.stun = 0.62; h.src.forceState('stagger'); }
+                if (h.src && h.src.alive && Math.abs(h.src.x - this.x) < 2.6 && h.src.y < 0.7) {
+                    // 完美格挡必须真正打断出招：只改 state 的话，敌人会在硬直结束后
+                    // 沿残留的 atkDef / BOSS 沿 current 技能继续把这一刀砍完。
+                    h.src.stun = 0.62;
+                    h.src.atkDef = null;
+                    h.src.telegraph = 0;
+                    if (h.src.current) {
+                        h.src.current = null;
+                        h.src.actionCd = Math.max(h.src.actionCd || 0, 0.7);
+                    }
+                    if (h.src.releaseToken) h.src.releaseToken();
+                    h.src.forceState('stagger');
+                }
             }
             if (dmg > 0) fx.damage(this.head(), dmg, 'guard');
             this.clampHp();
+            if (this.hp <= 0) this.die(h);
             return true;
         }
 
         /* ---- 命中 ---- */
-        this.lastBlockPerfect = false;
         let dmg = Math.max(1, Math.round(h.dmg));
         this.hp -= dmg;
         this.flash = 1;
@@ -367,12 +391,20 @@ class Actor {
         }
 
         if (h.kbUp > 0 || h.launch) {
+            this.atkDef = null;
+            this.telegraph = 0;
+            if (this.releaseToken) this.releaseToken();
             this.vy = Math.max(this.vy, h.kbUp || 3.2);
             this.y = Math.max(this.y, 0.02);
             this.forceState('downA');
             this.invuln = Math.max(this.invuln, 0.05);
             if (this.onLaunch) this.onLaunch(h);
         } else if (!armored) {
+            // 被击中就中断当前招式，否则 forceState 重置 stateT 后，
+            // 敌人会从硬直里恢复并「重新开始」这一刀，等于打断了还在挨打。
+            this.atkDef = null;
+            this.telegraph = 0;
+            if (this.releaseToken) this.releaseToken();
             this.facing = -h.dir;
             this.forceState('hurt');
             this.stun = stun;
